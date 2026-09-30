@@ -87,7 +87,8 @@
             class="min-w-0 flex-1 rounded-lg border border-slate-300 px-3 py-2 text-sm focus:border-indigo-500 focus:outline-none focus:ring-2 focus:ring-indigo-200">
           <button class="rounded-lg bg-slate-800 px-4 py-2 text-sm font-medium text-white hover:bg-slate-700">Fetch</button>
         </form>
-        <label class="flex items-start gap-2 text-sm text-slate-600">
+        <p id="ownProxyNote" class="hidden text-sm text-slate-600">If the calendar's server blocks direct requests (CORS), the link is fetched through this site's own proxy instead. Pasted and uploaded calendars never leave your device.</p>
+        <label id="publicProxyOpt" class="flex items-start gap-2 text-sm text-slate-600">
           <input id="useProxy" type="checkbox" class="mt-0.5 rounded border-slate-300">
           <span>If the direct request is blocked by CORS, retry through the public proxy <span class="mono">corsproxy.io</span>. <span class="text-amber-700">The URL is then sent to that third-party service.</span></span>
         </label>
@@ -1064,6 +1065,15 @@ document.addEventListener('dragover', e => e.preventDefault());
 document.addEventListener('drop', e => { e.preventDefault(); if (!dz.contains(e.target)) handleFile(e.dataTransfer?.files[0]); });
 
 // URL
+// Address of your own ics-proxy Cloudflare Worker (see worker/ics-proxy.js). Leave empty to offer the public proxy instead.
+const PROXY_URL = 'https://ics-proxy.ics-tools.workers.dev';
+if (PROXY_URL) { $('#publicProxyOpt').classList.add('hidden'); $('#ownProxyNote').classList.remove('hidden'); }
+async function fetchViaOwnProxy(url) {
+  const r = await fetch(PROXY_URL, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ url }) });
+  const text = await r.text();
+  if (!r.ok) throw new Error(text || `Proxy error (HTTP ${r.status})`);
+  return text;
+}
 $('#urlForm').addEventListener('submit', async e => {
   e.preventDefault();
   const msg = $('#urlMsg');
@@ -1076,10 +1086,16 @@ $('#urlForm').addEventListener('submit', async e => {
     let text, via = '';
     try { text = await get(url); }
     catch (err) {
+      if (PROXY_URL) {
+        msg.textContent = 'Direct request blocked; retrying through this site\'s proxy…';
+        text = await fetchViaOwnProxy(url);
+        via = ' via the site proxy';
+      } else {
       if (!$('#useProxy').checked) throw new Error(`Direct request failed (${err.message}). The server probably doesn't allow cross-origin requests (CORS). Tick the proxy option, or download the file and upload it.`);
       msg.textContent = 'Direct request blocked; retrying through corsproxy.io…';
       text = await get('https://corsproxy.io/?url=' + encodeURIComponent(url));
       via = ' via corsproxy.io';
+      }
     }
     msg.className = 'text-sm text-emerald-700';
     msg.textContent = `Fetched ${new TextEncoder().encode(text).length.toLocaleString()} bytes${via}.`;
