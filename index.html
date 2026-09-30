@@ -52,9 +52,9 @@
     <div class="rounded-xl border border-slate-200 bg-white shadow-sm">
       <div class="flex flex-wrap items-center justify-between gap-2 border-b border-slate-200 p-3">
         <div class="inline-flex rounded-lg bg-slate-100 p-1 text-sm font-medium text-slate-600" role="tablist" id="inputTabs">
-          <button class="tab-btn rounded-md px-3 py-1.5" data-tab="paste" aria-selected="true">Paste</button>
+          <button class="tab-btn rounded-md px-3 py-1.5" data-tab="url" aria-selected="true">URL</button>
           <button class="tab-btn rounded-md px-3 py-1.5" data-tab="upload" aria-selected="false">Upload</button>
-          <button class="tab-btn rounded-md px-3 py-1.5" data-tab="url" aria-selected="false">URL</button>
+          <button class="tab-btn rounded-md px-3 py-1.5" data-tab="paste" aria-selected="false">Paste</button>
         </div>
         <div class="flex gap-2 text-sm">
           <button id="sampleBtn" class="rounded-md border border-slate-300 px-2.5 py-1.5 hover:bg-slate-50">Load sample</button>
@@ -62,7 +62,7 @@
         </div>
       </div>
 
-      <div data-panel="paste" class="p-3">
+      <div data-panel="paste" class="hidden p-3">
         <textarea id="input" spellcheck="false" placeholder="BEGIN:VCALENDAR&#10;VERSION:2.0&#10;PRODID:-//Example//EN&#10;…"
           class="mono h-[26rem] w-full resize-y rounded-lg border border-slate-300 bg-slate-50 p-3 text-[13px] leading-5 focus:border-indigo-500 focus:bg-white focus:outline-none focus:ring-2 focus:ring-indigo-200"></textarea>
         <div class="mt-1 flex justify-between text-xs text-slate-500">
@@ -81,7 +81,7 @@
         <p id="fileMeta" class="mt-2 text-sm text-slate-500"></p>
       </div>
 
-      <div data-panel="url" class="hidden space-y-3 p-3">
+      <div data-panel="url" class="space-y-3 p-3">
         <form id="urlForm" class="flex flex-col gap-2 sm:flex-row">
           <input id="urlInput" type="url" required placeholder="https://example.com/calendar.ics  (webcal:// also works)"
             class="min-w-0 flex-1 rounded-lg border border-slate-300 px-3 py-2 text-sm focus:border-indigo-500 focus:outline-none focus:ring-2 focus:ring-indigo-200">
@@ -123,9 +123,9 @@
       <div class="rounded-xl border border-slate-200 bg-white shadow-sm">
         <div class="flex flex-wrap items-center justify-between gap-2 border-b border-slate-200 p-3">
           <div class="inline-flex rounded-lg bg-slate-100 p-1 text-sm font-medium text-slate-600" id="resultTabs">
-            <button class="tab-btn rounded-md px-3 py-1.5" data-tab="issues" aria-selected="true">Issues</button>
+            <button class="tab-btn rounded-md px-3 py-1.5" data-tab="source" aria-selected="true">Source</button>
+            <button class="tab-btn rounded-md px-3 py-1.5" data-tab="issues" aria-selected="false">Issues</button>
             <button class="tab-btn rounded-md px-3 py-1.5" data-tab="inspector" aria-selected="false">Inspector</button>
-            <button class="tab-btn rounded-md px-3 py-1.5" data-tab="source" aria-selected="false">Source</button>
           </div>
           <button id="copyBtn" class="inline-flex items-center gap-1.5 rounded-md border border-slate-300 px-3 py-1.5 text-sm hover:bg-slate-50">
             <svg viewBox="0 0 24 24" class="h-4 w-4" fill="none" stroke="currentColor" stroke-width="2"><rect x="9" y="9" width="12" height="12" rx="2"/><path d="M5 15V5a2 2 0 0 1 2-2h10"/></svg>
@@ -133,7 +133,7 @@
           </button>
         </div>
 
-        <div data-rpanel="issues" class="space-y-3 p-3" id="issuesPanel"></div>
+        <div data-rpanel="issues" class="hidden space-y-3 p-3" id="issuesPanel"></div>
 
         <div data-rpanel="inspector" class="hidden space-y-4 p-3">
           <div id="metaGrid" class="grid gap-3 sm:grid-cols-2"></div>
@@ -170,7 +170,7 @@
           </div>
         </div>
 
-        <div data-rpanel="source" class="hidden">
+        <div data-rpanel="source">
           <div id="sourceView" class="mono max-h-[36rem] overflow-auto py-2 text-[12.5px] leading-5"></div>
         </div>
       </div>
@@ -784,7 +784,8 @@ function setupTabs(containerSel, panelAttr, onChange) {
   btns.forEach(b => b.addEventListener('click', () => select(b.dataset.tab)));
   return select;
 }
-const selectInputTab = setupTabs('#inputTabs', 'data-panel');
+let inputTab = 'url';
+const selectInputTab = setupTabs('#inputTabs', 'data-panel', name => (inputTab = name));
 const selectResultTab = setupTabs('#resultTabs', 'data-rpanel');
 
 function toast(msg) {
@@ -1014,20 +1015,25 @@ function loadText(text, label, raw) {
   input.value = text.replace(/\r\n?/g, '\n');
   updateMeta();
   state.sourceLabel = label;
-  selectInputTab('paste');
   runValidation({ raw });
 }
+const loadSample = (text, label) => { selectInputTab('paste'); loadText(text, label); };
 
-$('#validateBtn').addEventListener('click', () => runValidation());
+$('#validateBtn').addEventListener('click', () => {
+  // On the URL tab, Validate fetches the URL that was typed in
+  if (inputTab === 'url' && $('#urlInput').value.trim()) $('#urlForm').requestSubmit();
+  else runValidation();
+});
 $('#clearBtn').addEventListener('click', () => {
   input.value = ''; updateMeta();
   $('#report').classList.add('hidden'); $('#emptyState').classList.remove('hidden');
   $('#fileMeta').textContent = ''; $('#urlMsg').textContent = '';
+  $('#urlInput').value = ''; $('#fileInput').value = '';
   state.result = null;
   input.focus();
 });
-$('#sampleBtn').addEventListener('click', () => loadText(SAMPLE, 'the sample calendar'));
-$('#brokenBtn').addEventListener('click', () => loadText(BROKEN_SAMPLE, 'the broken sample'));
+$('#sampleBtn').addEventListener('click', () => loadSample(SAMPLE, 'the sample calendar'));
+$('#brokenBtn').addEventListener('click', () => loadSample(BROKEN_SAMPLE, 'the broken sample'));
 
 $('#copyBtn').addEventListener('click', async () => {
   if (!state.result) return;
