@@ -1,0 +1,1204 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>iCal Validator</title>
+<meta name="description" content="Client-side iCalendar (RFC 5545) validator and inspector. Nothing leaves your browser.">
+<script src="https://cdn.tailwindcss.com"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/ical.js/1.5.0/ical.min.js"></script>
+<style>
+  body { background: #f8fafc; }
+  .mono { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; }
+  .src-line { display: flex; white-space: pre; }
+  .src-line .ln { flex: none; width: 3.5rem; padding-right: .75rem; text-align: right; color: #94a3b8; user-select: none; border-right: 1px solid #e2e8f0; margin-right: .75rem; }
+  .src-line.err { background: #fef2f2; }
+  .src-line.err .ln { color: #dc2626; font-weight: 600; border-right-color: #dc2626; }
+  .src-line.warn { background: #fffbeb; }
+  .src-line.warn .ln { color: #d97706; font-weight: 600; border-right-color: #d97706; }
+  .src-line.flash { animation: flash 1.6s ease-out; }
+  @keyframes flash { 0%, 30% { background: #bfdbfe; } 100% { } }
+  .tab-btn[aria-selected="true"] { background: #fff; color: #0f172a; box-shadow: 0 1px 2px rgb(0 0 0 / .08); }
+  .drop-active { border-color: #6366f1 !important; background: #eef2ff !important; }
+  details > summary { list-style: none; cursor: pointer; }
+  details > summary::-webkit-details-marker { display: none; }
+  details[open] .chev { transform: rotate(90deg); }
+</style>
+</head>
+<body class="min-h-screen text-slate-800 antialiased">
+
+<header class="border-b border-slate-200 bg-white">
+  <div class="mx-auto flex max-w-7xl flex-wrap items-center justify-between gap-3 px-4 py-4">
+    <div class="flex items-center gap-3">
+      <div class="grid h-10 w-10 place-items-center rounded-lg bg-indigo-600 text-white">
+        <svg viewBox="0 0 24 24" class="h-6 w-6" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="5" width="18" height="16" rx="2"/><path d="M3 10h18M8 3v4M16 3v4"/><path d="m9 15 2 2 4-4"/></svg>
+      </div>
+      <div>
+        <h1 class="text-lg font-semibold leading-tight">iCalendar Validator &amp; Inspector</h1>
+        <p class="text-sm text-slate-500">RFC 5545 checks, run entirely in your browser.</p>
+      </div>
+    </div>
+    <span class="inline-flex items-center gap-1.5 rounded-full bg-emerald-50 px-3 py-1 text-xs font-medium text-emerald-700 ring-1 ring-emerald-200">
+      <svg viewBox="0 0 24 24" class="h-3.5 w-3.5" fill="none" stroke="currentColor" stroke-width="2.5"><rect x="5" y="11" width="14" height="10" rx="2"/><path d="M8 11V7a4 4 0 0 1 8 0v4"/></svg>
+      Private: data stays on this device
+    </span>
+  </div>
+</header>
+
+<main class="mx-auto grid max-w-7xl gap-6 px-4 py-6 lg:grid-cols-[minmax(0,5fr)_minmax(0,7fr)]">
+
+  <!-- INPUT -->
+  <section class="flex flex-col gap-4">
+    <div class="rounded-xl border border-slate-200 bg-white shadow-sm">
+      <div class="flex flex-wrap items-center justify-between gap-2 border-b border-slate-200 p-3">
+        <div class="inline-flex rounded-lg bg-slate-100 p-1 text-sm font-medium text-slate-600" role="tablist" id="inputTabs">
+          <button class="tab-btn rounded-md px-3 py-1.5" data-tab="paste" aria-selected="true">Paste</button>
+          <button class="tab-btn rounded-md px-3 py-1.5" data-tab="upload" aria-selected="false">Upload</button>
+          <button class="tab-btn rounded-md px-3 py-1.5" data-tab="url" aria-selected="false">URL</button>
+        </div>
+        <div class="flex gap-2 text-sm">
+          <button id="sampleBtn" class="rounded-md border border-slate-300 px-2.5 py-1.5 hover:bg-slate-50">Load sample</button>
+          <button id="brokenBtn" class="rounded-md border border-slate-300 px-2.5 py-1.5 hover:bg-slate-50" title="A sample containing deliberate mistakes">Broken sample</button>
+        </div>
+      </div>
+
+      <div data-panel="paste" class="p-3">
+        <textarea id="input" spellcheck="false" placeholder="BEGIN:VCALENDAR&#10;VERSION:2.0&#10;PRODID:-//Example//EN&#10;…"
+          class="mono h-[26rem] w-full resize-y rounded-lg border border-slate-300 bg-slate-50 p-3 text-[13px] leading-5 focus:border-indigo-500 focus:bg-white focus:outline-none focus:ring-2 focus:ring-indigo-200"></textarea>
+        <div class="mt-1 flex justify-between text-xs text-slate-500">
+          <span id="inputMeta">0 lines</span>
+          <span class="hidden sm:inline">Ctrl + Enter to validate</span>
+        </div>
+      </div>
+
+      <div data-panel="upload" class="hidden p-3">
+        <label id="dropZone" class="flex h-56 cursor-pointer flex-col items-center justify-center gap-2 rounded-lg border-2 border-dashed border-slate-300 bg-slate-50 text-center transition hover:border-indigo-400">
+          <svg viewBox="0 0 24 24" class="h-10 w-10 text-slate-400" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M12 16V4m0 0-4 4m4-4 4 4"/><path d="M4 16v3a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-3"/></svg>
+          <span class="font-medium">Drop an .ics file here or click to browse</span>
+          <span class="text-xs text-slate-500">.ics, .ical, .ifb, .icalendar, .txt</span>
+          <input id="fileInput" type="file" accept=".ics,.ical,.ifb,.icalendar,.txt,text/calendar" class="hidden">
+        </label>
+        <p id="fileMeta" class="mt-2 text-sm text-slate-500"></p>
+      </div>
+
+      <div data-panel="url" class="hidden space-y-3 p-3">
+        <form id="urlForm" class="flex flex-col gap-2 sm:flex-row">
+          <input id="urlInput" type="url" required placeholder="https://example.com/calendar.ics  (webcal:// also works)"
+            class="min-w-0 flex-1 rounded-lg border border-slate-300 px-3 py-2 text-sm focus:border-indigo-500 focus:outline-none focus:ring-2 focus:ring-indigo-200">
+          <button class="rounded-lg bg-slate-800 px-4 py-2 text-sm font-medium text-white hover:bg-slate-700">Fetch</button>
+        </form>
+        <label class="flex items-start gap-2 text-sm text-slate-600">
+          <input id="useProxy" type="checkbox" class="mt-0.5 rounded border-slate-300">
+          <span>If the direct request is blocked by CORS, retry through the public proxy <span class="mono">corsproxy.io</span>. <span class="text-amber-700">The URL is then sent to that third-party service.</span></span>
+        </label>
+        <p id="urlMsg" class="text-sm"></p>
+      </div>
+
+      <div class="flex items-center justify-between gap-2 border-t border-slate-200 p-3">
+        <button id="clearBtn" class="rounded-md px-3 py-2 text-sm text-slate-600 hover:bg-slate-100">Clear</button>
+        <button id="validateBtn" class="rounded-lg bg-indigo-600 px-5 py-2 text-sm font-semibold text-white shadow-sm hover:bg-indigo-500">Validate</button>
+      </div>
+    </div>
+
+    <p class="px-1 text-xs leading-5 text-slate-500">
+      Structural and semantic checks follow RFC 5545. The text is also run through Mozilla's
+      <a class="underline" href="https://github.com/kewisch/ical.js" target="_blank" rel="noopener">ical.js</a> parser, and every RRULE is parsed with <span class="mono">ICAL.Recur</span>.
+    </p>
+  </section>
+
+  <!-- RESULTS -->
+  <section id="results" class="min-w-0">
+    <div id="emptyState" class="flex h-full min-h-[20rem] flex-col items-center justify-center gap-2 rounded-xl border border-dashed border-slate-300 bg-white p-8 text-center text-slate-500">
+      <svg viewBox="0 0 24 24" class="h-10 w-10 text-slate-300" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="3" y="5" width="18" height="16" rx="2"/><path d="M3 10h18M8 3v4M16 3v4"/></svg>
+      <p class="font-medium text-slate-600">No calendar validated yet</p>
+      <p class="text-sm">Paste iCalendar text, upload a file, fetch a URL, or load a sample.</p>
+    </div>
+
+    <div id="report" class="hidden space-y-4">
+      <div id="statusCard"></div>
+
+      <div class="grid grid-cols-2 gap-3 sm:grid-cols-4" id="statTiles"></div>
+
+      <div class="rounded-xl border border-slate-200 bg-white shadow-sm">
+        <div class="flex flex-wrap items-center justify-between gap-2 border-b border-slate-200 p-3">
+          <div class="inline-flex rounded-lg bg-slate-100 p-1 text-sm font-medium text-slate-600" id="resultTabs">
+            <button class="tab-btn rounded-md px-3 py-1.5" data-tab="issues" aria-selected="true">Issues</button>
+            <button class="tab-btn rounded-md px-3 py-1.5" data-tab="inspector" aria-selected="false">Inspector</button>
+            <button class="tab-btn rounded-md px-3 py-1.5" data-tab="source" aria-selected="false">Source</button>
+          </div>
+          <button id="copyBtn" class="inline-flex items-center gap-1.5 rounded-md border border-slate-300 px-3 py-1.5 text-sm hover:bg-slate-50">
+            <svg viewBox="0 0 24 24" class="h-4 w-4" fill="none" stroke="currentColor" stroke-width="2"><rect x="9" y="9" width="12" height="12" rx="2"/><path d="M5 15V5a2 2 0 0 1 2-2h10"/></svg>
+            <span>Copy report</span>
+          </button>
+        </div>
+
+        <div data-rpanel="issues" class="space-y-3 p-3" id="issuesPanel"></div>
+
+        <div data-rpanel="inspector" class="hidden space-y-4 p-3">
+          <div id="metaGrid" class="grid gap-3 sm:grid-cols-2"></div>
+          <div>
+            <h3 class="mb-2 text-xs font-semibold uppercase tracking-wide text-slate-500">Component counts</h3>
+            <div id="countChips" class="flex flex-wrap gap-2"></div>
+          </div>
+          <div>
+            <div class="mb-2 flex flex-wrap items-end gap-2">
+              <input id="search" type="search" placeholder="Search summary, location, UID…"
+                class="min-w-0 flex-1 basis-48 rounded-lg border border-slate-300 px-3 py-1.5 text-sm focus:border-indigo-500 focus:outline-none focus:ring-2 focus:ring-indigo-200">
+              <select id="typeFilter" class="rounded-lg border border-slate-300 px-2 py-1.5 text-sm"></select>
+              <label class="flex items-center gap-1 text-xs text-slate-500">From <input id="fromDate" type="date" class="rounded-lg border border-slate-300 px-2 py-1 text-sm text-slate-700"></label>
+              <label class="flex items-center gap-1 text-xs text-slate-500">To <input id="toDate" type="date" class="rounded-lg border border-slate-300 px-2 py-1 text-sm text-slate-700"></label>
+            </div>
+            <p id="itemCount" class="mb-2 text-xs text-slate-500"></p>
+            <div id="tableScrollTop" class="mb-1 overflow-x-auto overflow-y-hidden"><div class="h-px"></div></div>
+            <div id="tableScroll" class="overflow-x-auto rounded-lg border border-slate-200">
+              <table class="min-w-full text-left text-sm">
+                <thead class="bg-slate-50 text-xs uppercase tracking-wide text-slate-500">
+                  <tr>
+                    <th class="px-3 py-2 font-semibold">Summary</th>
+                    <th class="px-3 py-2 font-semibold">Start</th>
+                    <th class="px-3 py-2 font-semibold">End / Duration</th>
+                    <th class="px-3 py-2 font-semibold">Location</th>
+                    <th class="px-3 py-2 font-semibold">Recurrence</th>
+                    <th class="px-3 py-2 font-semibold">Status</th>
+                    <th class="px-3 py-2 font-semibold">UID</th>
+                  </tr>
+                </thead>
+                <tbody id="itemRows" class="divide-y divide-slate-100"></tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+
+        <div data-rpanel="source" class="hidden">
+          <div id="sourceView" class="mono max-h-[36rem] overflow-auto py-2 text-[12.5px] leading-5"></div>
+        </div>
+      </div>
+    </div>
+  </section>
+</main>
+
+<div id="toast" class="pointer-events-none fixed bottom-4 left-1/2 -translate-x-1/2 rounded-lg bg-slate-900 px-4 py-2 text-sm text-white opacity-0 transition"></div>
+
+<script>
+'use strict';
+
+/* ------------------------------------------------------------------ *
+ *  Reference data (RFC 5545 + RFC 7986 additions)
+ * ------------------------------------------------------------------ */
+const KNOWN_PROPS = new Set(('CALSCALE METHOD PRODID VERSION ATTACH CATEGORIES CLASS COMMENT DESCRIPTION GEO LOCATION ' +
+  'PERCENT-COMPLETE PRIORITY RESOURCES STATUS SUMMARY COMPLETED DTEND DUE DTSTART DURATION FREEBUSY TRANSP TZID TZNAME ' +
+  'TZOFFSETFROM TZOFFSETTO TZURL ATTENDEE CONTACT ORGANIZER RECURRENCE-ID RELATED-TO URL UID EXDATE RDATE RRULE ACTION ' +
+  'REPEAT TRIGGER CREATED DTSTAMP LAST-MODIFIED SEQUENCE REQUEST-STATUS NAME REFRESH-INTERVAL SOURCE COLOR IMAGE CONFERENCE').split(' '));
+
+const RULES = {
+  VCALENDAR: { req: ['PRODID', 'VERSION'], once: ['PRODID', 'VERSION', 'CALSCALE', 'METHOD'], children: ['VEVENT', 'VTODO', 'VJOURNAL', 'VFREEBUSY', 'VTIMEZONE'] },
+  VEVENT:    { req: ['UID', 'DTSTAMP'], rec: ['SUMMARY'], children: ['VALARM'],
+               once: ['DTSTAMP', 'UID', 'DTSTART', 'CLASS', 'CREATED', 'DESCRIPTION', 'GEO', 'LAST-MODIFIED', 'LOCATION', 'ORGANIZER', 'PRIORITY', 'SEQUENCE', 'STATUS', 'SUMMARY', 'TRANSP', 'URL', 'RECURRENCE-ID', 'DTEND', 'DURATION'] },
+  VTODO:     { req: ['UID', 'DTSTAMP'], rec: ['SUMMARY'], children: ['VALARM'],
+               once: ['DTSTAMP', 'UID', 'CLASS', 'COMPLETED', 'CREATED', 'DESCRIPTION', 'DTSTART', 'GEO', 'LAST-MODIFIED', 'LOCATION', 'ORGANIZER', 'PERCENT-COMPLETE', 'PRIORITY', 'RECURRENCE-ID', 'SEQUENCE', 'STATUS', 'SUMMARY', 'URL', 'DUE', 'DURATION'] },
+  VJOURNAL:  { req: ['UID', 'DTSTAMP'], children: [],
+               once: ['DTSTAMP', 'UID', 'CLASS', 'CREATED', 'DTSTART', 'LAST-MODIFIED', 'ORGANIZER', 'RECURRENCE-ID', 'SEQUENCE', 'STATUS', 'SUMMARY', 'URL'] },
+  VFREEBUSY: { req: ['UID', 'DTSTAMP'], children: [], once: ['DTSTAMP', 'UID', 'CONTACT', 'DTSTART', 'DTEND', 'ORGANIZER', 'URL'] },
+  VTIMEZONE: { req: ['TZID'], once: ['TZID', 'LAST-MODIFIED', 'TZURL'], children: ['STANDARD', 'DAYLIGHT'] },
+  STANDARD:  { req: ['DTSTART', 'TZOFFSETTO', 'TZOFFSETFROM'], once: ['DTSTART', 'TZOFFSETTO', 'TZOFFSETFROM'], children: [] },
+  DAYLIGHT:  { req: ['DTSTART', 'TZOFFSETTO', 'TZOFFSETFROM'], once: ['DTSTART', 'TZOFFSETTO', 'TZOFFSETFROM'], children: [] },
+  VALARM:    { req: ['ACTION', 'TRIGGER'], once: ['ACTION', 'TRIGGER', 'DURATION', 'REPEAT', 'DESCRIPTION', 'SUMMARY'], children: [] },
+};
+
+const STATUS_VALUES = {
+  VEVENT: ['TENTATIVE', 'CONFIRMED', 'CANCELLED'],
+  VTODO: ['NEEDS-ACTION', 'COMPLETED', 'IN-PROCESS', 'CANCELLED'],
+  VJOURNAL: ['DRAFT', 'FINAL', 'CANCELLED'],
+};
+const DATE_PROPS = ['DTSTART', 'DTEND', 'DUE', 'DTSTAMP', 'CREATED', 'LAST-MODIFIED', 'RECURRENCE-ID', 'COMPLETED'];
+const UTC_ONLY = ['DTSTAMP', 'CREATED', 'LAST-MODIFIED', 'COMPLETED'];
+const TEXT_PROPS = ['SUMMARY', 'DESCRIPTION', 'LOCATION', 'COMMENT', 'CONTACT', 'RESOURCES', 'CATEGORIES', 'TZNAME', 'X-WR-CALNAME', 'X-WR-CALDESC', 'NAME'];
+const DUR_RE = /^[+-]?P(?:\d+W|(?:\d+D)?(?:T(?=\d)(?:\d+H)?(?:\d+M)?(?:\d+S)?)?)$/;
+const MAX_LONG_LINE_ISSUES = 25;
+
+/* ------------------------------------------------------------------ *
+ *  Low-level helpers
+ * ------------------------------------------------------------------ */
+const $ = s => document.querySelector(s);
+const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+const unescapeText = s => String(s ?? '').replace(/\\([\\;,nN])/g, (_, c) => (c === 'n' || c === 'N') ? '\n' : c);
+const isX = n => /^X-/i.test(n);
+
+function parseDT(v) {
+  let m = /^(\d{4})(\d{2})(\d{2})$/.exec(v);
+  if (m) return { kind: 'date', y: +m[1], mo: +m[2], d: +m[3], key: v + 'T000000' };
+  m = /^(\d{4})(\d{2})(\d{2})T(\d{2})(\d{2})(\d{2})(Z?)$/.exec(v);
+  if (m) return { kind: 'date-time', y: +m[1], mo: +m[2], d: +m[3], h: +m[4], mi: +m[5], s: +m[6], utc: !!m[7], key: v.slice(0, 15) };
+  return null;
+}
+
+function dtRangeError(d) {
+  if (d.mo < 1 || d.mo > 12) return 'month';
+  const dim = new Date(Date.UTC(d.y, d.mo, 0)).getUTCDate();
+  if (d.d < 1 || d.d > dim) return 'day';
+  if (d.kind === 'date-time') {
+    if (d.h > 23) return 'hour';
+    if (d.mi > 59) return 'minute';
+    if (d.s > 60) return 'second';
+  }
+  return null;
+}
+
+/** Splits one unfolded content line into name / params / value. */
+function parseContentLine(raw) {
+  const m = /^([A-Za-z0-9-]+)/.exec(raw);
+  if (!m) return { error: 'Invalid content line: property name must contain only letters, digits and "-".' };
+  const name = m[1].toUpperCase();
+  const params = {};
+  let i = m[1].length;
+  while (raw[i] === ';') {
+    i++;
+    const pm = /^([A-Za-z0-9-]+)=/.exec(raw.slice(i));
+    if (!pm) return { error: `Malformed parameter in ${name} (expected NAME=value).` };
+    const pname = pm[1].toUpperCase();
+    i += pm[0].length;
+    const vals = [];
+    for (;;) {
+      if (raw[i] === '"') {
+        const end = raw.indexOf('"', i + 1);
+        if (end < 0) return { error: `Unterminated quoted value for parameter ${pname}.` };
+        vals.push(raw.slice(i + 1, end));
+        i = end + 1;
+      } else {
+        let j = i;
+        while (j < raw.length && !',;:'.includes(raw[j])) {
+          if (raw[j] === '"') return { error: `Unexpected double quote in parameter ${pname}.` };
+          j++;
+        }
+        vals.push(raw.slice(i, j));
+        i = j;
+      }
+      if (raw[i] === ',') { i++; continue; }
+      break;
+    }
+    params[pname] = vals.join(',');
+  }
+  if (raw[i] !== ':') return { error: `Missing ":" between the property name/parameters and the value of ${name}.` };
+  return { name, params, value: raw.slice(i + 1) };
+}
+
+/* ------------------------------------------------------------------ *
+ *  Validator
+ * ------------------------------------------------------------------ */
+function validate(input, { checkLineEndings = false } = {}) {
+  const issues = [];
+  const add = (level, msg, line = null, ctx = '') => issues.push({ level, msg, line, ctx });
+
+  let text = input;
+  if (text.charCodeAt(0) === 0xFEFF) {
+    text = text.slice(1);
+    add('warning', 'Input starts with a byte order mark (BOM); some clients reject it.', 1);
+  }
+  if (checkLineEndings && /(^|[^\r])\n/.test(text)) {
+    add('warning', 'Lines end with LF only; RFC 5545 requires CRLF ("\\r\\n") line breaks.');
+  }
+
+  // Step 1: normalise line endings, physical-line checks
+  const norm = text.replace(/\r\n?/g, '\n');
+  const lines = norm.split('\n');
+  if (lines.length > 1 && lines[lines.length - 1] === '') lines.pop();
+
+  const enc = new TextEncoder();
+  let longCount = 0;
+  lines.forEach((l, i) => {
+    const n = enc.encode(l).length;
+    if (n > 75 && ++longCount <= MAX_LONG_LINE_ISSUES)
+      add('warning', `Line is ${n} octets long; lines should be folded at 75 octets.`, i + 1);
+    if (/[\x00-\x08\x0A-\x1F\x7F]/.test(l)) add('error', 'Line contains a control character (only horizontal tab is allowed).', i + 1);
+  });
+  if (longCount > MAX_LONG_LINE_ISSUES)
+    add('warning', `…plus ${longCount - MAX_LONG_LINE_ISSUES} more lines longer than 75 octets.`);
+
+  // Step 2: unfold into logical lines, keeping the original line number
+  const logical = [];
+  lines.forEach((l, i) => {
+    if (/^[ \t]/.test(l)) {
+      if (!logical.length || logical[logical.length - 1].raw === '') {
+        add('error', 'Folded continuation line (starting with a space) has no preceding content line.', i + 1);
+        return;
+      }
+      logical[logical.length - 1].raw += l.slice(1);
+    } else {
+      logical.push({ raw: l, line: i + 1 });
+    }
+  });
+
+  // Step 3: build component tree
+  const root = { name: '#root', props: [], children: [], line: 0 };
+  const stack = [root];
+  let sawEmpty = false;
+  for (const L of logical) {
+    if (L.raw.trim() === '') {
+      if (!sawEmpty) add('warning', 'Empty line; RFC 5545 does not allow blank content lines.', L.line);
+      sawEmpty = true;
+      continue;
+    }
+    const p = parseContentLine(L.raw);
+    if (p.error) { add('error', p.error, L.line); continue; }
+    const top = stack[stack.length - 1];
+    if (p.name === 'BEGIN') {
+      const comp = { name: p.value.trim().toUpperCase(), props: [], children: [], line: L.line, endLine: null, parent: top };
+      top.children.push(comp);
+      stack.push(comp);
+    } else if (p.name === 'END') {
+      const v = p.value.trim().toUpperCase();
+      const idx = stack.map(c => c.name).lastIndexOf(v);
+      if (idx < 1) {
+        add('error', `END:${v} has no matching BEGIN:${v}.`, L.line);
+      } else {
+        for (let k = stack.length - 1; k > idx; k--)
+          add('error', `BEGIN:${stack[k].name} (line ${stack[k].line}) is not closed before END:${v}.`, L.line);
+        stack[idx].endLine = L.line;
+        stack.length = idx;
+      }
+    } else if (stack.length === 1) {
+      add('error', `Property ${p.name} appears outside of any component (before BEGIN:VCALENDAR or after END:VCALENDAR).`, L.line);
+    } else {
+      top.props.push({ ...p, line: L.line });
+    }
+  }
+  for (let k = stack.length - 1; k > 0; k--)
+    add('error', `BEGIN:${stack[k].name} is never closed with END:${stack[k].name}.`, stack[k].line);
+
+  // Step 4: root-level checks
+  const firstContent = logical.find(l => l.raw.trim() !== '');
+  if (!firstContent) {
+    add('error', 'Input is empty.');
+  } else if (!/^BEGIN:VCALENDAR\s*$/i.test(firstContent.raw)) {
+    add('error', 'Calendar must start with BEGIN:VCALENDAR.', firstContent.line);
+  }
+  root.children.forEach(c => {
+    if (c.name !== 'VCALENDAR') add('error', `Top-level component must be VCALENDAR, found ${c.name}.`, c.line);
+  });
+  const cals = root.children.filter(c => c.name === 'VCALENDAR');
+  if (!cals.length && firstContent) add('error', 'No VCALENDAR component found (BEGIN:VCALENDAR … END:VCALENDAR).');
+  if (cals.length > 1) add('warning', `Found ${cals.length} VCALENDAR objects in one stream; most clients read only the first.`, cals[1].line);
+
+  // Step 5: semantic checks per component
+  const ctx = { tzids: new Map(), tzUses: new Map(), uids: new Map(), floating: 0, method: null };
+  for (const cal of cals) {
+    ctx.method = cal.props.find(p => p.name === 'METHOD')?.value ?? null;
+    checkComponent(cal, ctx, add);
+    if (!cal.children.some(c => c.name !== 'VTIMEZONE'))
+      add('error', 'VCALENDAR must contain at least one calendar component (VEVENT, VTODO, VJOURNAL or VFREEBUSY).', cal.line, 'VCALENDAR');
+  }
+
+  // Cross-component checks
+  for (const [tzid, line] of ctx.tzUses) {
+    if (!ctx.tzids.has(tzid))
+      add('warning', `TZID "${tzid}" is referenced but no matching VTIMEZONE is defined.`, line);
+  }
+  for (const [uid, list] of ctx.uids) {
+    const masters = list.filter(x => !x.recurrenceId);
+    if (masters.length > 1)
+      add('warning', `UID "${uid}" is used by ${masters.length} components without RECURRENCE-ID; UIDs must be unique.`, masters[1].line);
+  }
+  if (ctx.floating)
+    add('info', `${ctx.floating} date-time value(s) are "floating" (no TZID and no Z); they are interpreted in the viewer's local time zone.`);
+
+  // Step 6: ical.js parse (Mozilla parser)
+  let icalError = null;
+  if (window.ICAL) {
+    try { ICAL.parse(norm); }
+    catch (e) {
+      icalError = e.message || String(e);
+      const hasErrors = issues.some(i => i.level === 'error');
+      const snip = /"([^"]{3,})"\s*$/.exec(icalError);
+      const line = snip ? lines.findIndex(l => l.includes(snip[1].slice(0, 40))) + 1 || null : null;
+      add(hasErrors ? 'info' : 'error', `ical.js parser rejected the input: ${icalError}`, line);
+    }
+  } else {
+    add('info', 'ical.js could not be loaded (offline?). Built-in RFC 5545 checks still ran.');
+  }
+
+  const counts = {};
+  (function count(c) { c.children.forEach(ch => { counts[ch.name] = (counts[ch.name] || 0) + 1; count(ch); }); })(root);
+
+  issues.forEach((it, i) => it.order = i);
+  issues.sort((a, b) => (a.line ?? 1e9) - (b.line ?? 1e9) || a.order - b.order);
+
+  return { issues, lines, root, cal: cals[0] || null, counts, ctx };
+}
+
+function compLabel(c) {
+  const s = c.props.find(p => p.name === 'SUMMARY')?.value || c.props.find(p => p.name === 'TZID')?.value;
+  return s ? `${c.name} "${unescapeText(s).slice(0, 40)}"` : c.name;
+}
+
+function checkComponent(comp, ctx, add) {
+  const label = compLabel(comp);
+  const err = (m, line = comp.line) => add('error', m, line, label);
+  const warn = (m, line = comp.line) => add('warning', m, line, label);
+  const rules = RULES[comp.name];
+  const parent = comp.parent;
+
+  // Placement
+  if (comp.name !== 'VCALENDAR' && !isX(comp.name)) {
+    const allowed = RULES[parent.name]?.children;
+    if (!rules) warn(`Unknown component ${comp.name}; it is neither standard nor an X- extension.`);
+    else if (allowed && !allowed.includes(comp.name)) err(`${comp.name} is not allowed inside ${parent.name}.`);
+  }
+  if (comp.name === 'VCALENDAR' && parent.name !== '#root') err('VCALENDAR cannot be nested inside another component.');
+
+  const by = {};
+  comp.props.forEach(p => (by[p.name] ||= []).push(p));
+  const one = n => by[n]?.[0];
+
+  if (rules) {
+    rules.req.forEach(n => { if (!by[n]) err(`Missing required property ${n}.`); });
+    (rules.rec || []).forEach(n => { if (!by[n]) warn(`Missing recommended property ${n}.`); });
+    rules.once.forEach(n => { if (by[n]?.length > 1) err(`${n} must not occur more than once.`, by[n][1].line); });
+  }
+  if (by.RRULE?.length > 1) warn('RRULE should not occur more than once in a component.', by.RRULE[1].line);
+
+  // Per-property value checks
+  const dts = {};
+  for (const p of comp.props) {
+    const E = m => err(m, p.line), W = m => warn(m, p.line);
+    if (!KNOWN_PROPS.has(p.name) && !isX(p.name)) W(`Non-standard property ${p.name} (custom properties should start with "X-").`);
+    if (p.params.TZID != null) {
+      const tz = p.params.TZID;
+      if (!ctx.tzUses.has(tz)) ctx.tzUses.set(tz, p.line);
+    }
+    if (TEXT_PROPS.includes(p.name) && /\\(?![\\;,nN])/.test(p.value))
+      E(`${p.name} contains an invalid escape sequence (only \\\\, \\;, \\, and \\n are allowed).`);
+
+    if (DATE_PROPS.includes(p.name)) {
+      const d = checkDateProp(p, comp, ctx, E, UTC_ONLY.includes(p.name));
+      if (d && !dts[p.name]) dts[p.name] = d;
+      continue;
+    }
+    switch (p.name) {
+      case 'VERSION':
+        if (p.value.trim() !== '2.0') E(`VERSION must be "2.0" (found "${p.value}").`);
+        break;
+      case 'CALSCALE':
+        if (p.value.toUpperCase() !== 'GREGORIAN') W(`CALSCALE "${p.value}" is not GREGORIAN; most clients only support GREGORIAN.`);
+        break;
+      case 'PRODID':
+        if (!p.value.trim()) E('PRODID must not be empty.');
+        break;
+      case 'UID':
+        if (!p.value.trim()) E('UID must not be empty.');
+        else if (['VEVENT', 'VTODO', 'VJOURNAL', 'VFREEBUSY'].includes(comp.name)) {
+          const list = ctx.uids.get(p.value) || [];
+          list.push({ line: p.line, recurrenceId: !!one('RECURRENCE-ID') });
+          ctx.uids.set(p.value, list);
+        }
+        break;
+      case 'EXDATE':
+      case 'RDATE':
+        checkDateProp(p, comp, ctx, E, false, true);
+        break;
+      case 'DURATION':
+        if (!DUR_RE.test(p.value)) E(`DURATION "${p.value}" is not a valid duration (e.g. PT1H30M, P1D, P2W).`);
+        break;
+      case 'TRIGGER': {
+        const vt = (p.params.VALUE || 'DURATION').toUpperCase();
+        if (vt === 'DATE-TIME') {
+          const d = parseDT(p.value);
+          if (!d || d.kind !== 'date-time' || !d.utc) E(`TRIGGER with VALUE=DATE-TIME must be a UTC date-time (found "${p.value}").`);
+        } else if (!DUR_RE.test(p.value)) E(`TRIGGER "${p.value}" is not a valid duration (e.g. -PT15M).`);
+        if (p.params.RELATED && !['START', 'END'].includes(p.params.RELATED.toUpperCase())) E('TRIGGER RELATED parameter must be START or END.');
+        break;
+      }
+      case 'TZOFFSETFROM':
+      case 'TZOFFSETTO':
+        if (!/^[+-](?:[01]\d|2[0-3])[0-5]\d(?:[0-5]\d)?$/.test(p.value) || /^-0000(00)?$/.test(p.value))
+          E(`${p.name} "${p.value}" must be a UTC offset like +0100 or -0530.`);
+        break;
+      case 'GEO': {
+        const m = /^([+-]?\d+(?:\.\d+)?);([+-]?\d+(?:\.\d+)?)$/.exec(p.value);
+        if (!m) E(`GEO "${p.value}" must be "latitude;longitude" (two decimals separated by ";").`);
+        else if (Math.abs(+m[1]) > 90 || Math.abs(+m[2]) > 180) E('GEO latitude/longitude out of range.');
+        break;
+      }
+      case 'PRIORITY':
+        if (!/^\d$/.test(p.value)) E(`PRIORITY must be an integer 0–9 (found "${p.value}").`);
+        break;
+      case 'SEQUENCE':
+      case 'REPEAT':
+        if (!/^\d+$/.test(p.value)) E(`${p.name} must be a non-negative integer (found "${p.value}").`);
+        break;
+      case 'PERCENT-COMPLETE':
+        if (!/^\d+$/.test(p.value) || +p.value > 100) E(`PERCENT-COMPLETE must be an integer 0–100 (found "${p.value}").`);
+        break;
+      case 'STATUS': {
+        const allowed = STATUS_VALUES[comp.name];
+        if (allowed && !allowed.includes(p.value.toUpperCase())) E(`STATUS "${p.value}" is not valid for ${comp.name} (allowed: ${allowed.join(', ')}).`);
+        break;
+      }
+      case 'TRANSP':
+        if (!['OPAQUE', 'TRANSPARENT'].includes(p.value.toUpperCase())) E(`TRANSP must be OPAQUE or TRANSPARENT (found "${p.value}").`);
+        break;
+      case 'CLASS':
+        if (!['PUBLIC', 'PRIVATE', 'CONFIDENTIAL'].includes(p.value.toUpperCase()) && !isX(p.value)) W(`Unrecognised CLASS "${p.value}".`);
+        break;
+      case 'ACTION':
+        if (!['AUDIO', 'DISPLAY', 'EMAIL'].includes(p.value.toUpperCase()) && !isX(p.value)) E(`ACTION must be AUDIO, DISPLAY or EMAIL (found "${p.value}").`);
+        break;
+      case 'RRULE':
+        checkRRule(p, one('DTSTART'), E);
+        break;
+      case 'URL':
+      case 'TZURL':
+        if (!/^[a-z][a-z0-9+.-]*:\S+$/i.test(p.value)) W(`${p.name} "${p.value}" does not look like a URI.`);
+        break;
+      case 'ORGANIZER':
+      case 'ATTENDEE':
+        if (!/^[a-z][a-z0-9+.-]*:/i.test(p.value)) E(`${p.name} must be a calendar address URI such as "mailto:someone@example.com".`);
+        break;
+    }
+  }
+
+  // Cross-property rules
+  const start = dts.DTSTART, dtStartP = one('DTSTART');
+  const sameZone = (a, b) => a.kind === 'date' && b.kind === 'date' || (a.utc && b.utc) || (!a.utc && !b.utc && a.tzid === b.tzid);
+
+  if (comp.name === 'VEVENT') {
+    if (!ctx.method && !by.DTSTART) err('Missing DTSTART (required when the calendar has no METHOD property).');
+    if (by.DTEND && by.DURATION) err('DTEND and DURATION must not both be present.', by.DURATION[0].line);
+    if (by.DTEND && !by.DTSTART) err('DTEND is present but DTSTART is missing.', by.DTEND[0].line);
+    const end = dts.DTEND;
+    if (start && end) {
+      if (start.kind !== end.kind) err(`DTEND value type (${end.kind}) must match DTSTART (${start.kind}).`, by.DTEND[0].line);
+      else if (sameZone(start, end) && end.key < start.key) err('DTEND is before DTSTART.', by.DTEND[0].line);
+      else if (sameZone(start, end) && end.key === start.key && start.kind === 'date') warn('DTEND equals DTSTART for an all-day event; DTEND is exclusive, so the event has no duration.', by.DTEND[0].line);
+    }
+    if (start?.kind === 'date' && by.DURATION && !/^[+-]?P(\d+W|\d+D)$/.test(by.DURATION[0].value))
+      err('With an all-day (DATE) DTSTART, DURATION must be in whole days or weeks.', by.DURATION[0].line);
+  }
+  if (comp.name === 'VTODO') {
+    if (by.DUE && by.DURATION) err('DUE and DURATION must not both be present.', by.DURATION[0].line);
+    if (by.DURATION && !by.DTSTART) err('DURATION requires DTSTART in a VTODO.', by.DURATION[0].line);
+    const due = dts.DUE;
+    if (start && due) {
+      if (start.kind !== due.kind) err(`DUE value type (${due.kind}) must match DTSTART (${start.kind}).`, by.DUE[0].line);
+      else if (sameZone(start, due) && due.key < start.key) err('DUE is before DTSTART.', by.DUE[0].line);
+    }
+  }
+  if (comp.name === 'VTIMEZONE') {
+    const tzid = one('TZID')?.value;
+    if (tzid) {
+      if (ctx.tzids.has(tzid)) err(`Duplicate VTIMEZONE for TZID "${tzid}".`);
+      ctx.tzids.set(tzid, comp.line);
+    }
+    if (!comp.children.some(c => c.name === 'STANDARD' || c.name === 'DAYLIGHT'))
+      err('VTIMEZONE must contain at least one STANDARD or DAYLIGHT sub-component.');
+  }
+  if ((comp.name === 'STANDARD' || comp.name === 'DAYLIGHT') && start) {
+    if (start.utc || dtStartP?.params.TZID) err('STANDARD/DAYLIGHT DTSTART must be a local date-time without "Z" or TZID.', dtStartP.line);
+  }
+  if (comp.name === 'VALARM') {
+    if (!!by.DURATION !== !!by.REPEAT) err('DURATION and REPEAT must both be present or both absent in a VALARM.');
+    const action = one('ACTION')?.value.toUpperCase();
+    if (action === 'DISPLAY' && !by.DESCRIPTION) err('DISPLAY alarms require a DESCRIPTION.');
+    if (action === 'EMAIL') {
+      ['DESCRIPTION', 'SUMMARY', 'ATTENDEE'].forEach(n => { if (!by[n]) err(`EMAIL alarms require ${n}.`); });
+    }
+  }
+
+  comp.children.forEach(c => checkComponent(c, ctx, add));
+}
+
+function checkDateProp(p, comp, ctx, E, utcOnly, list = false) {
+  const vt = (p.params.VALUE || 'DATE-TIME').toUpperCase();
+  const tzid = p.params.TZID;
+  const inTz = comp.name === 'STANDARD' || comp.name === 'DAYLIGHT';
+  let first = null;
+  for (const raw of (list ? p.value.split(',') : [p.value])) {
+    const v = raw.trim();
+    if (vt === 'PERIOD') {
+      if (p.name !== 'RDATE') { E(`${p.name} does not allow VALUE=PERIOD.`); continue; }
+      const [a, b] = v.split('/');
+      const pa = parseDT(a || ''), pb = parseDT(b || '');
+      if (!pa || pa.kind !== 'date-time' || !(pb?.kind === 'date-time' || DUR_RE.test(b || '')))
+        E(`RDATE period "${v}" is invalid (expected start/end or start/duration).`);
+      continue;
+    }
+    if (vt !== 'DATE' && vt !== 'DATE-TIME') { E(`${p.name} does not allow VALUE=${vt}.`); continue; }
+    const d = parseDT(v);
+    if (!d) { E(`${p.name} "${v}" is not a valid ${vt} (expected ${vt === 'DATE' ? 'YYYYMMDD' : 'YYYYMMDDTHHMMSS or YYYYMMDDTHHMMSSZ'}).`); continue; }
+    if (vt === 'DATE-TIME' && d.kind === 'date') E(`${p.name} "${v}" is a date without a time, so it needs the VALUE=DATE parameter.`);
+    if (vt === 'DATE' && d.kind === 'date-time') E(`${p.name} has VALUE=DATE but "${v}" includes a time.`);
+    const r = dtRangeError(d);
+    if (r) E(`${p.name} "${v}" has an out-of-range ${r}.`);
+    if (d.kind === 'date-time') {
+      if (d.utc && tzid) E(`${p.name}: a TZID parameter must not be combined with a UTC ("Z") time.`);
+      if (utcOnly && !d.utc) E(`${p.name} must be in UTC (the value should end in "Z").`);
+      if (!d.utc && !tzid && !utcOnly && !inTz) ctx.floating++;
+    } else if (utcOnly) {
+      E(`${p.name} must be a UTC date-time, not a date.`);
+    }
+    if (!first) first = { ...d, tzid };
+  }
+  return first;
+}
+
+function checkRRule(p, dtstartProp, report) {
+  let failed = false;
+  const E = m => { failed = true; report(m); };
+  const parts = {};
+  for (const seg of p.value.split(';')) {
+    const [k, v] = seg.split('=');
+    if (!k || v === undefined) { E(`RRULE part "${seg}" is malformed (expected NAME=value).`); return; }
+    const K = k.toUpperCase();
+    if (parts[K] !== undefined) E(`RRULE part ${K} is repeated.`);
+    parts[K] = v;
+  }
+  const known = ['FREQ', 'UNTIL', 'COUNT', 'INTERVAL', 'BYSECOND', 'BYMINUTE', 'BYHOUR', 'BYDAY', 'BYMONTHDAY', 'BYYEARDAY', 'BYWEEKNO', 'BYMONTH', 'BYSETPOS', 'WKST', 'RSCALE', 'SKIP'];
+  Object.keys(parts).forEach(k => { if (!known.includes(k) && !isX(k)) E(`RRULE has unknown part ${k}.`); });
+  if (!parts.FREQ) E('RRULE must contain FREQ.');
+  else if (!['SECONDLY', 'MINUTELY', 'HOURLY', 'DAILY', 'WEEKLY', 'MONTHLY', 'YEARLY'].includes(parts.FREQ.toUpperCase()))
+    E(`RRULE FREQ "${parts.FREQ}" is invalid.`);
+  if (parts.UNTIL && parts.COUNT) E('RRULE must not contain both UNTIL and COUNT.');
+  if (parts.COUNT && !/^[1-9]\d*$/.test(parts.COUNT)) E('RRULE COUNT must be a positive integer.');
+  if (parts.INTERVAL && !/^[1-9]\d*$/.test(parts.INTERVAL)) E('RRULE INTERVAL must be a positive integer.');
+  const DAY = '(MO|TU|WE|TH|FR|SA|SU)';
+  if (parts.WKST && !new RegExp(`^${DAY}$`).test(parts.WKST)) E('RRULE WKST must be a weekday (MO…SU).');
+  const listCheck = (k, re, min, max) => {
+    if (parts[k] === undefined) return;
+    for (const x of parts[k].split(',')) {
+      if (re) { if (!re.test(x)) { E(`RRULE ${k} value "${x}" is invalid.`); return; } continue; }
+      if (!/^[+-]?\d+$/.test(x) || Math.abs(+x) < min || Math.abs(+x) > max || (min === 1 && +x === 0)) { E(`RRULE ${k} value "${x}" is out of range.`); return; }
+    }
+  };
+  listCheck('BYDAY', new RegExp(`^([+-]?([1-9]|[1-4]\\d|5[0-3]))?${DAY}$`));
+  listCheck('BYSECOND', /^([0-5]?\d|60)$/);
+  listCheck('BYMINUTE', /^[0-5]?\d$/);
+  listCheck('BYHOUR', /^([01]?\d|2[0-3])$/);
+  listCheck('BYMONTH', /^([1-9]|1[0-2])$/);
+  listCheck('BYMONTHDAY', null, 1, 31);
+  listCheck('BYYEARDAY', null, 1, 366);
+  listCheck('BYWEEKNO', null, 1, 53);
+  listCheck('BYSETPOS', null, 1, 366);
+
+  if (parts.UNTIL) {
+    const u = parseDT(parts.UNTIL);
+    if (!u) E(`RRULE UNTIL "${parts.UNTIL}" is not a valid date or date-time.`);
+    else if (dtstartProp) {
+      const s = parseDT(dtstartProp.value.trim());
+      if (s) {
+        if (s.kind === 'date' && u.kind !== 'date') E('RRULE UNTIL must be a DATE because DTSTART is a DATE.');
+        else if (s.kind === 'date-time' && u.kind === 'date') E('RRULE UNTIL must be a DATE-TIME because DTSTART is a DATE-TIME.');
+        else if (s.kind === 'date-time' && (s.utc || dtstartProp.params.TZID) && !u.utc) E('RRULE UNTIL must be in UTC ("Z") when DTSTART has a TZID or is UTC.');
+      }
+    }
+  }
+  if (window.ICAL && !failed) {
+    try { ICAL.Recur.fromString(p.value); }
+    catch (e) { E(`ICAL.Recur could not parse RRULE: ${e.message || e}`); }
+  }
+}
+
+/* ------------------------------------------------------------------ *
+ *  Inspector model
+ * ------------------------------------------------------------------ */
+function buildInspector(result) {
+  const cal = result.cal;
+  if (!cal) return { meta: [], items: [] };
+  const get = (c, n) => c.props.find(p => p.name === n);
+  const val = (c, n) => get(c, n)?.value;
+  const tzs = cal.children.filter(c => c.name === 'VTIMEZONE').map(c => val(c, 'TZID')).filter(Boolean);
+  const meta = [
+    ['PRODID', val(cal, 'PRODID')],
+    ['VERSION', val(cal, 'VERSION')],
+    ['CALSCALE', val(cal, 'CALSCALE') || 'GREGORIAN (default)'],
+    ['METHOD', val(cal, 'METHOD')],
+    ['Calendar name', unescapeText(val(cal, 'X-WR-CALNAME') || val(cal, 'NAME') || '')],
+    ['Description', unescapeText(val(cal, 'X-WR-CALDESC') || val(cal, 'DESCRIPTION') || '')],
+    ['Default time zone', val(cal, 'X-WR-TIMEZONE') || tzs[0] || ''],
+    ['VTIMEZONE definitions', tzs.join(', ')],
+  ];
+  const items = cal.children.filter(c => ['VEVENT', 'VTODO', 'VJOURNAL'].includes(c.name)).map(c => {
+    const s = get(c, 'DTSTART'), e = get(c, 'DTEND') || get(c, 'DUE'), dur = get(c, 'DURATION');
+    const sd = s && parseDT(s.value.trim());
+    return {
+      type: c.name,
+      comp: c,
+      summary: unescapeText(val(c, 'SUMMARY') || ''),
+      start: s, end: e, duration: dur,
+      location: unescapeText(val(c, 'LOCATION') || ''),
+      rrule: val(c, 'RRULE') || '',
+      recurrenceId: get(c, 'RECURRENCE-ID'),
+      status: val(c, 'STATUS') || '',
+      uid: val(c, 'UID') || '',
+      alarms: c.children.filter(a => a.name === 'VALARM').length,
+      key: sd ? sd.key : null,
+    };
+  });
+  items.sort((a, b) => (a.key === null) - (b.key === null) || (a.key || '').localeCompare(b.key || ''));
+  return { meta, items };
+}
+
+function fmtDT(p) {
+  if (!p) return '';
+  const d = parseDT(p.value.trim());
+  if (!d) return p.value;
+  const date = `${d.y}-${String(d.mo).padStart(2, '0')}-${String(d.d).padStart(2, '0')}`;
+  if (d.kind === 'date') return `${date} (all day)`;
+  const time = `${String(d.h).padStart(2, '0')}:${String(d.mi).padStart(2, '0')}${d.s ? ':' + String(d.s).padStart(2, '0') : ''}`;
+  return `${date} ${time} ${d.utc ? 'UTC' : p.params.TZID || '(floating)'}`;
+}
+
+function fmtDuration(v) {
+  const m = /^([+-])?P(?:(\d+)W)?(?:(\d+)D)?(?:T(?:(\d+)H)?(?:(\d+)M)?(?:(\d+)S)?)?$/.exec(v || '');
+  if (!m) return v || '';
+  const out = [['w', m[2]], ['d', m[3]], ['h', m[4]], ['m', m[5]], ['s', m[6]]].filter(x => x[1] && +x[1]).map(x => x[1] + x[0]);
+  return (m[1] === '-' ? '−' : '') + (out.join(' ') || '0');
+}
+
+function fmtRRule(r) {
+  if (!r) return '';
+  const p = Object.fromEntries(r.split(';').map(s => s.split('=')).map(([k, v]) => [k.toUpperCase(), v]));
+  const unit = { DAILY: 'day', WEEKLY: 'week', MONTHLY: 'month', YEARLY: 'year', HOURLY: 'hour', MINUTELY: 'minute', SECONDLY: 'second' }[(p.FREQ || '').toUpperCase()];
+  if (!unit) return r;
+  const n = +(p.INTERVAL || 1);
+  let s = n === 1 ? `Every ${unit}` : `Every ${n} ${unit}s`;
+  if (p.BYDAY) s += ` on ${p.BYDAY}`;
+  if (p.BYMONTHDAY) s += ` on day ${p.BYMONTHDAY}`;
+  if (p.BYMONTH) s += ` in month ${p.BYMONTH}`;
+  if (p.COUNT) s += `, ${p.COUNT}×`;
+  if (p.UNTIL) { const u = parseDT(p.UNTIL); s += u ? `, until ${u.y}-${String(u.mo).padStart(2, '0')}-${String(u.d).padStart(2, '0')}` : `, until ${p.UNTIL}`; }
+  return s;
+}
+
+/* ------------------------------------------------------------------ *
+ *  UI
+ * ------------------------------------------------------------------ */
+const state = { result: null, inspector: null, sourceLabel: 'pasted text' };
+
+function setupTabs(containerSel, panelAttr, onChange) {
+  const btns = document.querySelectorAll(`${containerSel} .tab-btn`);
+  const select = name => {
+    btns.forEach(b => b.setAttribute('aria-selected', String(b.dataset.tab === name)));
+    document.querySelectorAll(`[${panelAttr}]`).forEach(p => p.classList.toggle('hidden', p.getAttribute(panelAttr) !== name));
+    onChange?.(name);
+  };
+  btns.forEach(b => b.addEventListener('click', () => select(b.dataset.tab)));
+  return select;
+}
+const selectInputTab = setupTabs('#inputTabs', 'data-panel');
+const selectResultTab = setupTabs('#resultTabs', 'data-rpanel');
+
+function toast(msg) {
+  const t = $('#toast');
+  t.textContent = msg;
+  t.style.opacity = '1';
+  clearTimeout(toast.timer);
+  toast.timer = setTimeout(() => (t.style.opacity = '0'), 1800);
+}
+
+function runValidation(opts = {}) {
+  const text = $('#input').value;
+  if (!text.trim()) { toast('Nothing to validate yet'); return; }
+  state.result = validate(opts.raw ?? text, { checkLineEndings: !!opts.raw });
+  state.inspector = buildInspector(state.result);
+  render();
+}
+
+function render() {
+  const { issues, counts, lines } = state.result;
+  const errors = issues.filter(i => i.level === 'error');
+  const warnings = issues.filter(i => i.level === 'warning');
+  const infos = issues.filter(i => i.level === 'info');
+  const pass = errors.length === 0;
+  $('#emptyState').classList.add('hidden');
+  $('#report').classList.remove('hidden');
+
+  const compSummary = Object.entries(counts).filter(([n]) => n !== 'VCALENDAR').map(([n, c]) => `${c} ${n}`).join(', ') || 'no components';
+  $('#statusCard').innerHTML = pass
+    ? `<div class="flex items-start gap-4 rounded-xl border border-emerald-200 bg-emerald-50 p-4">
+         <div class="grid h-11 w-11 flex-none place-items-center rounded-full bg-emerald-500 text-white"><svg viewBox="0 0 24 24" class="h-6 w-6" fill="none" stroke="currentColor" stroke-width="3"><path d="m5 12 5 5 9-10"/></svg></div>
+         <div><h2 class="text-lg font-semibold text-emerald-900">Valid iCalendar${warnings.length ? ' with warnings' : ''}</h2>
+         <p class="text-sm text-emerald-800">No errors found in ${esc(state.sourceLabel)}. Contains ${esc(compSummary)}.${warnings.length ? ` Review ${warnings.length} warning${warnings.length > 1 ? 's' : ''} for better compatibility.` : ''}</p></div>
+       </div>`
+    : `<div class="flex items-start gap-4 rounded-xl border border-red-200 bg-red-50 p-4">
+         <div class="grid h-11 w-11 flex-none place-items-center rounded-full bg-red-500 text-white"><svg viewBox="0 0 24 24" class="h-6 w-6" fill="none" stroke="currentColor" stroke-width="3"><path d="M6 6l12 12M18 6 6 18"/></svg></div>
+         <div><h2 class="text-lg font-semibold text-red-900">Invalid iCalendar</h2>
+         <p class="text-sm text-red-800">${errors.length} error${errors.length > 1 ? 's' : ''} must be fixed for ${esc(state.sourceLabel)} to conform to RFC 5545.</p></div>
+       </div>`;
+
+  const tile = (label, value, cls) => `<div class="rounded-xl border border-slate-200 bg-white p-3 shadow-sm"><div class="text-xs font-medium uppercase tracking-wide text-slate-500">${label}</div><div class="mt-1 text-2xl font-semibold ${cls}">${value}</div></div>`;
+  $('#statTiles').innerHTML =
+    tile('Errors', errors.length, errors.length ? 'text-red-600' : 'text-slate-800') +
+    tile('Warnings', warnings.length, warnings.length ? 'text-amber-600' : 'text-slate-800') +
+    tile('Events', counts.VEVENT || 0, 'text-slate-800') +
+    tile('Lines', lines.length, 'text-slate-800');
+
+  renderIssues(errors, warnings, infos, pass, compSummary);
+  renderInspector();
+  renderSource();
+}
+
+function renderIssues(errors, warnings, infos, pass, compSummary) {
+  const lines = state.result.lines;
+  const item = (it, tone) => {
+    const snippet = it.line ? lines[it.line - 1] : null;
+    return `<li class="px-3 py-2.5">
+      <div class="flex flex-wrap items-baseline gap-x-2 gap-y-1">
+        ${it.line ? `<button class="goto rounded bg-${tone}-100 px-1.5 py-0.5 text-xs font-semibold text-${tone}-800 hover:bg-${tone}-200 mono" data-line="${it.line}" title="Show in source">L${it.line}</button>` : ''}
+        ${it.ctx ? `<span class="text-xs font-medium text-slate-500">${esc(it.ctx)}</span>` : ''}
+      </div>
+      <p class="mt-1 text-sm text-slate-800">${esc(it.msg)}</p>
+      ${snippet != null && snippet !== '' ? `<pre class="mono mt-1.5 overflow-x-auto rounded bg-slate-50 px-2 py-1 text-xs text-slate-600">${esc(snippet.length > 160 ? snippet.slice(0, 160) + '…' : snippet)}</pre>` : ''}
+    </li>`;
+  };
+  const group = (title, list, tone, icon, open) => !list.length ? '' : `
+    <details class="overflow-hidden rounded-lg border border-${tone}-200" ${open ? 'open' : ''}>
+      <summary class="flex items-center gap-2 bg-${tone}-50 px-3 py-2 text-sm font-semibold text-${tone}-900">
+        <svg viewBox="0 0 24 24" class="chev h-4 w-4 transition-transform" fill="none" stroke="currentColor" stroke-width="2.5"><path d="m9 6 6 6-6 6"/></svg>
+        <span>${icon}</span> ${title} <span class="ml-auto rounded-full bg-white px-2 text-xs ring-1 ring-${tone}-200">${list.length}</span>
+      </summary>
+      <ul class="divide-y divide-slate-100 bg-white">${list.map(i => item(i, tone)).join('')}</ul>
+    </details>`;
+
+  const success = pass ? `
+    <div class="rounded-lg border border-emerald-200 bg-emerald-50 px-3 py-2.5 text-sm text-emerald-900">
+      <span class="font-semibold">🟢 Structure valid.</span> BEGIN/END blocks balance, required properties are present, and values are well-formed. Contains ${esc(compSummary)}.
+    </div>` : '';
+
+  $('#issuesPanel').innerHTML =
+    group('Errors', errors, 'red', '🔴', true) +
+    group('Warnings', warnings, 'amber', '🟡', true) +
+    success +
+    group('Notes', infos, 'sky', 'ℹ️', true) +
+    (!pass && !warnings.length && !infos.length ? '<p class="text-sm text-slate-500">No issues found.</p>' : '');
+}
+
+function renderInspector() {
+  const { meta, items } = state.inspector;
+  $('#metaGrid').innerHTML = meta.map(([k, v]) => `
+    <div class="rounded-lg border border-slate-200 bg-slate-50 px-3 py-2">
+      <div class="text-xs font-medium uppercase tracking-wide text-slate-500">${esc(k)}</div>
+      <div class="mt-0.5 break-words text-sm ${v ? 'text-slate-800' : 'text-slate-400'}">${esc(v || '—')}</div>
+    </div>`).join('');
+
+  const counts = state.result.counts;
+  $('#countChips').innerHTML = Object.keys(counts).length
+    ? Object.entries(counts).map(([n, c]) => `<span class="inline-flex items-center gap-1.5 rounded-full bg-indigo-50 px-3 py-1 text-sm text-indigo-800 ring-1 ring-indigo-200"><span class="mono text-xs">${esc(n)}</span><span class="font-semibold">${c}</span></span>`).join('')
+    : '<span class="text-sm text-slate-400">No components</span>';
+
+  const types = [...new Set(items.map(i => i.type))];
+  const sel = $('#typeFilter');
+  const prev = sel.value;
+  sel.innerHTML = `<option value="">All types</option>` + types.map(t => `<option value="${t}">${t}</option>`).join('');
+  sel.value = types.includes(prev) ? prev : (types.includes('VEVENT') && types.length > 1 ? 'VEVENT' : '');
+  renderItems();
+}
+
+function renderItems() {
+  const { items } = state.inspector;
+  const q = $('#search').value.trim().toLowerCase();
+  const type = $('#typeFilter').value;
+  const from = $('#fromDate').value.replace(/-/g, '');
+  const to = $('#toDate').value.replace(/-/g, '');
+  const shown = items.filter(it => {
+    if (type && it.type !== type) return false;
+    if (q && ![it.summary, it.location, it.uid, it.status, it.rrule].some(s => s.toLowerCase().includes(q))) return false;
+    if ((from || to) && !it.key) return false;
+    if (from && it.key.slice(0, 8) < from) return false;
+    if (to && it.key.slice(0, 8) > to) return false;
+    return true;
+  });
+  requestAnimationFrame(syncTopScrollbar);
+  $('#itemCount').textContent = `Showing ${shown.length} of ${items.length} item${items.length === 1 ? '' : 's'}, sorted by start date. Click a row for all properties.`;
+
+  const statusCls = s => ({ CONFIRMED: 'bg-emerald-50 text-emerald-700 ring-emerald-200', COMPLETED: 'bg-emerald-50 text-emerald-700 ring-emerald-200', FINAL: 'bg-emerald-50 text-emerald-700 ring-emerald-200',
+    TENTATIVE: 'bg-amber-50 text-amber-700 ring-amber-200', 'NEEDS-ACTION': 'bg-amber-50 text-amber-700 ring-amber-200', 'IN-PROCESS': 'bg-sky-50 text-sky-700 ring-sky-200',
+    CANCELLED: 'bg-red-50 text-red-700 ring-red-200' }[s.toUpperCase()] || 'bg-slate-50 text-slate-600 ring-slate-200');
+
+  if (!shown.length) {
+    $('#itemRows').innerHTML = `<tr><td colspan="7" class="px-3 py-8 text-center text-sm text-slate-400">${items.length ? 'No items match the current filters.' : 'This calendar has no events, to-dos or journal entries.'}</td></tr>`;
+    return;
+  }
+  $('#itemRows').innerHTML = shown.map((it, i) => {
+    const idx = items.indexOf(it);
+    const endCell = it.end ? esc(fmtDT(it.end)) : it.duration ? `<span class="text-slate-500">Duration</span> ${esc(fmtDuration(it.duration.value))}` : '<span class="text-slate-300">—</span>';
+    const detail = it.comp.props.map(p => {
+      const params = Object.entries(p.params).map(([k, v]) => `<span class="text-slate-400">;${esc(k)}=${esc(v)}</span>`).join('');
+      return `<div class="flex gap-2 py-0.5"><button class="goto mono flex-none text-xs text-slate-400 hover:text-indigo-600" data-line="${p.line}">L${p.line}</button><div class="mono min-w-0 break-all text-xs"><span class="font-semibold text-indigo-700">${esc(p.name)}</span>${params}<span class="text-slate-400">:</span>${esc(p.value)}</div></div>`;
+    }).join('');
+    const alarms = it.comp.children.map(ch => `<div class="mt-2 rounded border border-slate-200 bg-white p-2"><div class="mb-1 text-xs font-semibold text-slate-500">${esc(ch.name)} <button class="goto font-normal text-slate-400 hover:text-indigo-600" data-line="${ch.line}">L${ch.line}</button></div>${ch.props.map(p => `<div class="mono break-all text-xs"><span class="font-semibold text-indigo-700">${esc(p.name)}</span><span class="text-slate-400">:</span>${esc(p.value)}</div>`).join('')}</div>`).join('');
+    return `
+      <tr class="item-row cursor-pointer align-top hover:bg-slate-50" data-idx="${idx}">
+        <td class="px-3 py-2">
+          <div class="font-medium text-slate-800">${it.summary ? esc(it.summary) : '<span class="italic text-slate-400">(no summary)</span>'}</div>
+          <div class="mt-0.5 flex flex-wrap gap-1 text-[11px]">
+            ${it.type !== 'VEVENT' ? `<span class="rounded bg-slate-100 px-1.5 text-slate-600">${it.type}</span>` : ''}
+            ${it.recurrenceId ? `<span class="rounded bg-violet-50 px-1.5 text-violet-700">override ${esc(fmtDT(it.recurrenceId))}</span>` : ''}
+            ${it.alarms ? `<span class="rounded bg-slate-100 px-1.5 text-slate-600">🔔 ${it.alarms}</span>` : ''}
+          </div>
+        </td>
+        <td class="whitespace-nowrap px-3 py-2 text-slate-700">${it.start ? esc(fmtDT(it.start)) : '<span class="text-slate-300">—</span>'}</td>
+        <td class="whitespace-nowrap px-3 py-2 text-slate-700">${endCell}</td>
+        <td class="max-w-[12rem] px-3 py-2 text-slate-700">${esc(it.location) || '<span class="text-slate-300">—</span>'}</td>
+        <td class="max-w-[14rem] px-3 py-2 text-slate-700" title="${esc(it.rrule)}">${it.rrule ? esc(fmtRRule(it.rrule)) : '<span class="text-slate-300">—</span>'}</td>
+        <td class="px-3 py-2">${it.status ? `<span class="rounded-full px-2 py-0.5 text-xs ring-1 ${statusCls(it.status)}">${esc(it.status)}</span>` : '<span class="text-slate-300">—</span>'}</td>
+        <td class="mono max-w-[10rem] truncate px-3 py-2 text-xs text-slate-500" title="${esc(it.uid)}">${esc(it.uid) || '<span class="text-red-400">missing</span>'}</td>
+      </tr>
+      <tr class="detail-row hidden bg-slate-50" data-for="${idx}"><td colspan="7" class="px-3 py-3">${detail}${alarms}</td></tr>`;
+  }).join('');
+}
+
+/* Mirror the table's horizontal scrollbar above it, so wide tables can be scrolled from the top too. */
+const topBar = $('#tableScrollTop'), tableBox = $('#tableScroll');
+function syncTopScrollbar() {
+  topBar.firstElementChild.style.width = tableBox.scrollWidth + 'px';
+  topBar.classList.toggle('hidden', tableBox.scrollWidth <= tableBox.clientWidth);
+  topBar.scrollLeft = tableBox.scrollLeft;
+}
+const mirrorScroll = (from, to) => from.addEventListener('scroll', () => {
+  if (to.scrollLeft !== from.scrollLeft) to.scrollLeft = from.scrollLeft;
+});
+mirrorScroll(topBar, tableBox);
+mirrorScroll(tableBox, topBar);
+new ResizeObserver(syncTopScrollbar).observe(tableBox);
+
+function renderSource() {
+  const { lines, issues } = state.result;
+  const sev = {};
+  issues.forEach(i => { if (i.line && (i.level === 'error' || (i.level === 'warning' && sev[i.line] !== 'err'))) sev[i.line] = i.level === 'error' ? 'err' : 'warn'; });
+  const titles = {};
+  issues.forEach(i => { if (i.line) (titles[i.line] ||= []).push(i.msg); });
+  $('#sourceView').innerHTML = lines.map((l, i) => {
+    const n = i + 1;
+    return `<div class="src-line ${sev[n] || ''}" id="src-${n}"${titles[n] ? ` title="${esc(titles[n].join('\n'))}"` : ''}><span class="ln">${n}</span><span class="pr-4">${esc(l) || ' '}</span></div>`;
+  }).join('');
+}
+
+function gotoLine(n) {
+  selectResultTab('source');
+  const el = document.getElementById('src-' + n);
+  if (!el) return;
+  const view = $('#sourceView');
+  view.scrollTop = el.offsetTop - view.clientHeight / 3;
+  el.classList.remove('flash'); void el.offsetWidth; el.classList.add('flash');
+  $('#report').scrollIntoView({ block: 'nearest', behavior: 'smooth' });
+}
+
+function reportText() {
+  const { issues, counts } = state.result;
+  const errors = issues.filter(i => i.level === 'error'), warnings = issues.filter(i => i.level === 'warning'), infos = issues.filter(i => i.level === 'info');
+  const fmt = i => `  - ${i.line ? `[line ${i.line}] ` : ''}${i.ctx ? i.ctx + ': ' : ''}${i.msg}`;
+  const out = [
+    'iCalendar (RFC 5545) Validation Report',
+    `Source: ${state.sourceLabel}`,
+    `Result: ${errors.length ? 'INVALID' : 'VALID'} (${errors.length} error(s), ${warnings.length} warning(s))`,
+    `Components: ${Object.entries(counts).map(([n, c]) => `${n}×${c}`).join(', ') || 'none'}`,
+  ];
+  if (errors.length) out.push('', 'Errors:', ...errors.map(fmt));
+  if (warnings.length) out.push('', 'Warnings:', ...warnings.map(fmt));
+  if (infos.length) out.push('', 'Notes:', ...infos.map(fmt));
+  return out.join('\n');
+}
+
+/* ------------------------------------------------------------------ *
+ *  Input handling
+ * ------------------------------------------------------------------ */
+const input = $('#input');
+const updateMeta = () => {
+  const v = input.value;
+  $('#inputMeta').textContent = `${v ? v.split(/\r\n|\r|\n/).length : 0} lines · ${new TextEncoder().encode(v).length.toLocaleString()} bytes`;
+};
+input.addEventListener('input', () => { updateMeta(); state.sourceLabel = 'pasted text'; });
+input.addEventListener('keydown', e => { if (e.key === 'Enter' && (e.ctrlKey || e.metaKey)) { e.preventDefault(); runValidation(); } });
+
+function loadText(text, label, raw) {
+  input.value = text.replace(/\r\n?/g, '\n');
+  updateMeta();
+  state.sourceLabel = label;
+  selectInputTab('paste');
+  runValidation({ raw });
+}
+
+$('#validateBtn').addEventListener('click', () => runValidation());
+$('#clearBtn').addEventListener('click', () => {
+  input.value = ''; updateMeta();
+  $('#report').classList.add('hidden'); $('#emptyState').classList.remove('hidden');
+  $('#fileMeta').textContent = ''; $('#urlMsg').textContent = '';
+  state.result = null;
+  input.focus();
+});
+$('#sampleBtn').addEventListener('click', () => loadText(SAMPLE, 'the sample calendar'));
+$('#brokenBtn').addEventListener('click', () => loadText(BROKEN_SAMPLE, 'the broken sample'));
+
+$('#copyBtn').addEventListener('click', async () => {
+  if (!state.result) return;
+  try { await navigator.clipboard.writeText(reportText()); toast('Report copied to clipboard'); }
+  catch {
+    const ta = Object.assign(document.createElement('textarea'), { value: reportText() });
+    document.body.append(ta); ta.select(); document.execCommand('copy'); ta.remove();
+    toast('Report copied to clipboard');
+  }
+});
+
+document.addEventListener('click', e => {
+  const g = e.target.closest('.goto');
+  if (g) { e.stopPropagation(); gotoLine(+g.dataset.line); return; }
+  const row = e.target.closest('.item-row');
+  if (row) document.querySelector(`.detail-row[data-for="${row.dataset.idx}"]`)?.classList.toggle('hidden');
+});
+['search', 'typeFilter', 'fromDate', 'toDate'].forEach(id => $('#' + id).addEventListener('input', () => state.inspector && renderItems()));
+
+// Files
+async function handleFile(file) {
+  if (!file) return;
+  if (file.size > 20 * 1024 * 1024) { $('#fileMeta').textContent = 'File is larger than 20 MB; please use a smaller file.'; return; }
+  const text = await file.text();
+  $('#fileMeta').textContent = `Loaded ${file.name} (${(file.size / 1024).toFixed(1)} KB).`;
+  loadText(text, file.name, text);
+}
+$('#fileInput').addEventListener('change', e => handleFile(e.target.files[0]));
+const dz = $('#dropZone');
+['dragenter', 'dragover'].forEach(ev => dz.addEventListener(ev, e => { e.preventDefault(); dz.classList.add('drop-active'); }));
+['dragleave', 'drop'].forEach(ev => dz.addEventListener(ev, e => { e.preventDefault(); dz.classList.remove('drop-active'); }));
+dz.addEventListener('drop', e => handleFile(e.dataTransfer.files[0]));
+// Dropping anywhere on the page also works
+document.addEventListener('dragover', e => e.preventDefault());
+document.addEventListener('drop', e => { e.preventDefault(); if (!dz.contains(e.target)) handleFile(e.dataTransfer?.files[0]); });
+
+// URL
+$('#urlForm').addEventListener('submit', async e => {
+  e.preventDefault();
+  const msg = $('#urlMsg');
+  let url = $('#urlInput').value.trim().replace(/^webcals?:\/\//i, 'https://');
+  if (!/^https?:\/\//i.test(url)) { msg.className = 'text-sm text-red-600'; msg.textContent = 'Only http(s):// and webcal:// URLs are supported.'; return; }
+  msg.className = 'text-sm text-slate-500';
+  msg.textContent = 'Fetching…';
+  const get = async u => { const r = await fetch(u); if (!r.ok) throw new Error(`HTTP ${r.status} ${r.statusText}`); return r.text(); };
+  try {
+    let text, via = '';
+    try { text = await get(url); }
+    catch (err) {
+      if (!$('#useProxy').checked) throw new Error(`Direct request failed (${err.message}). The server probably doesn't allow cross-origin requests (CORS). Tick the proxy option, or download the file and upload it.`);
+      msg.textContent = 'Direct request blocked; retrying through corsproxy.io…';
+      text = await get('https://corsproxy.io/?url=' + encodeURIComponent(url));
+      via = ' via corsproxy.io';
+    }
+    msg.className = 'text-sm text-emerald-700';
+    msg.textContent = `Fetched ${new TextEncoder().encode(text).length.toLocaleString()} bytes${via}.`;
+    loadText(text, url, text);
+  } catch (err) {
+    msg.className = 'text-sm text-red-600';
+    msg.innerHTML = esc(err.message.startsWith('Direct') ? err.message : `Could not fetch the URL: ${err.message}`) +
+      `<span class="mt-2 flex flex-wrap items-center gap-2 text-slate-600">
+         <a href="${esc(url)}" target="_blank" rel="noopener noreferrer" class="rounded-md border border-slate-300 px-2.5 py-1 font-medium text-slate-800 hover:bg-slate-50">Open link to download it</a>
+         <span>then drop the file on this page.</span>
+       </span>`;
+  }
+});
+
+/* ------------------------------------------------------------------ *
+ *  Sample data
+ * ------------------------------------------------------------------ */
+const SAMPLE = `BEGIN:VCALENDAR
+VERSION:2.0
+PRODID:-//Example Corp//Team Calendar 1.0//EN
+CALSCALE:GREGORIAN
+METHOD:PUBLISH
+X-WR-CALNAME:Product Team
+X-WR-TIMEZONE:Europe/London
+BEGIN:VTIMEZONE
+TZID:Europe/London
+BEGIN:DAYLIGHT
+TZOFFSETFROM:+0000
+TZOFFSETTO:+0100
+TZNAME:BST
+DTSTART:19700329T010000
+RRULE:FREQ=YEARLY;BYMONTH=3;BYDAY=-1SU
+END:DAYLIGHT
+BEGIN:STANDARD
+TZOFFSETFROM:+0100
+TZOFFSETTO:+0000
+TZNAME:GMT
+DTSTART:19701025T020000
+RRULE:FREQ=YEARLY;BYMONTH=10;BYDAY=-1SU
+END:STANDARD
+END:VTIMEZONE
+BEGIN:VEVENT
+UID:standup-2026@example.com
+DTSTAMP:20260901T090000Z
+DTSTART;TZID=Europe/London:20261005T093000
+DTEND;TZID=Europe/London:20261005T094500
+SUMMARY:Daily stand-up
+LOCATION:Room 4 / Zoom
+RRULE:FREQ=WEEKLY;BYDAY=MO,TU,WE,TH,FR;COUNT=40
+STATUS:CONFIRMED
+BEGIN:VALARM
+ACTION:DISPLAY
+DESCRIPTION:Stand-up in 5 minutes
+TRIGGER:-PT5M
+END:VALARM
+END:VEVENT
+BEGIN:VEVENT
+UID:roadmap-q4@example.com
+DTSTAMP:20260901T090000Z
+DTSTART;TZID=Europe/London:20261012T140000
+DURATION:PT2H
+SUMMARY:Q4 roadmap review
+DESCRIPTION:Walk through the Q4 roadmap\\, agree priorities\\nand owners.
+LOCATION:Board room
+STATUS:TENTATIVE
+END:VEVENT
+BEGIN:VEVENT
+UID:offsite-2026@example.com
+DTSTAMP:20260901T090000Z
+DTSTART;VALUE=DATE:20261102
+DTEND;VALUE=DATE:20261104
+SUMMARY:Team off-site
+LOCATION:Lake District
+STATUS:CONFIRMED
+END:VEVENT
+BEGIN:VTODO
+UID:todo-slides@example.com
+DTSTAMP:20260901T090000Z
+DUE;VALUE=DATE:20261009
+SUMMARY:Prepare roadmap slides
+STATUS:NEEDS-ACTION
+PRIORITY:2
+END:VTODO
+END:VCALENDAR
+`;
+
+const BROKEN_SAMPLE = `BEGIN:VCALENDAR
+VERSION:1.0
+PRODID:-//Example Corp//Broken Calendar//EN
+BEGIN:VEVENT
+DTSTAMP:20260901T090000
+DTSTART;TZID=America/New_York:20261005T253000
+DTEND;TZID=America/New_York:20261005T090000
+DURATION:PT1H
+SUMMARY:Planning session with a very long title that goes well past the seventy-five octet limit
+RRULE:FREQ=FORTNIGHTLY;COUNT=5;UNTIL=20261231T000000Z
+STATUS:DONE
+END:VEVENT
+BEGIN:VEVENT
+UID:dup@example.com
+DTSTAMP:20260901T090000Z
+DTSTART:20261010
+LOCATION:Main office
+BEGIN:VALARM
+ACTION:DISPLAY
+TRIGGER:-PT10M
+END:VALARM
+END:VEVENT
+BEGIN:VEVENT
+UID:dup@example.com
+DTSTAMP:20260901T090000Z
+DTSTART:20261011T100000Z
+SUMMARY:Second event
+GEO:91.5;10
+END:VEVENT
+END:VCALENDAR
+`;
+
+updateMeta();
+</script>
+</body>
+</html>
