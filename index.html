@@ -23,7 +23,50 @@
   details > summary { list-style: none; cursor: pointer; }
   details > summary::-webkit-details-marker { display: none; }
   details[open] .chev { transform: rotate(90deg); }
+  dialog::backdrop { background: rgb(15 23 42 / .5); }
+
+  /* Dark theme: overrides for the utility classes this page uses */
+  html.dark { color-scheme: dark; }
+  .dark body { background: #0f172a; color: #e2e8f0; }
+  .dark .bg-white { background-color: #1e293b; }
+  .dark .bg-slate-50 { background-color: #172033; }
+  .dark .bg-slate-100 { background-color: #0f172a; }
+  .dark .bg-slate-800 { background-color: #475569; }
+  .dark .hover\:bg-slate-50:hover, .dark .hover\:bg-slate-100:hover { background-color: #334155; }
+  .dark .text-slate-800, .dark .text-slate-700 { color: #e2e8f0; }
+  .dark .text-slate-600 { color: #cbd5e1; }
+  .dark .text-slate-500 { color: #94a3b8; }
+  .dark .text-slate-400 { color: #64748b; }
+  .dark .text-slate-300 { color: #475569; }
+  .dark .border-slate-200, .dark .border-slate-300 { border-color: #334155; }
+  .dark .divide-slate-100 > :not([hidden]) ~ :not([hidden]) { border-color: #334155; }
+  .dark .tab-btn[aria-selected="true"] { background: #334155; color: #f1f5f9; }
+  .dark input, .dark select, .dark textarea, .dark .focus\:bg-white:focus { background-color: #0f172a; color: #e2e8f0; }
+  .dark .src-line .ln { border-right-color: #334155; color: #64748b; }
+  .dark .src-line.err { background: rgb(127 29 29 / .35); }
+  .dark .src-line.err .ln { color: #f87171; border-right-color: #f87171; }
+  .dark .src-line.warn { background: rgb(120 53 15 / .35); }
+  .dark .src-line.warn .ln { color: #fbbf24; border-right-color: #fbbf24; }
+  .dark .src-line.flash { animation-name: flash-dark; }
+  @keyframes flash-dark { 0%, 30% { background: #1d4ed8; } 100% { } }
+  .dark .drop-active { background: #1e1b4b !important; }
 </style>
+<script>
+  // Apply the saved or system theme before the page paints, and build the dark tints for the status colours
+  (function () {
+    let saved = null;
+    try { saved = localStorage.getItem('theme'); } catch {}
+    const dark = saved ? saved === 'dark' : matchMedia('(prefers-color-scheme: dark)').matches;
+    document.documentElement.classList.toggle('dark', dark);
+    const tones = { red: ['127 29 29', '#fca5a5', '248 113 113'], amber: ['120 53 15', '#fcd34d', '251 191 36'], emerald: ['6 78 59', '#6ee7b7', '52 211 153'],
+                    sky: ['12 74 110', '#7dd3fc', '56 189 248'], indigo: ['49 46 129', '#a5b4fc', '129 140 248'], violet: ['76 29 149', '#c4b5fd', '167 139 250'] };
+    const css = Object.entries(tones).map(([t, [bg, text, line]]) => `
+      .dark .bg-${t}-50{background-color:rgb(${bg}/.35)} .dark .bg-${t}-100{background-color:rgb(${bg}/.6)} .dark .hover\\:bg-${t}-200:hover{background-color:rgb(${bg}/.9)}
+      .dark .text-${t}-900,.dark .text-${t}-800,.dark .text-${t}-700,.dark .text-${t}-600{color:${text}}
+      .dark .border-${t}-200{border-color:rgb(${line}/.4)} .dark .ring-${t}-200{--tw-ring-color:rgb(${line}/.4)}`).join('');
+    document.head.appendChild(Object.assign(document.createElement('style'), { textContent: css }));
+  })();
+</script>
 </head>
 <body class="min-h-screen text-slate-800 antialiased">
 
@@ -35,13 +78,19 @@
       </div>
       <div>
         <h1 class="text-lg font-semibold leading-tight">iCalendar Validator &amp; Inspector</h1>
-        <p class="text-sm text-slate-500">RFC 5545 checks, run entirely in your browser.</p>
+        <p class="text-sm text-slate-500">Check a calendar link or .ics file for mistakes.</p>
       </div>
     </div>
-    <span class="inline-flex items-center gap-1.5 rounded-full bg-emerald-50 px-3 py-1 text-xs font-medium text-emerald-700 ring-1 ring-emerald-200">
-      <svg viewBox="0 0 24 24" class="h-3.5 w-3.5" fill="none" stroke="currentColor" stroke-width="2.5"><rect x="5" y="11" width="14" height="10" rx="2"/><path d="M8 11V7a4 4 0 0 1 8 0v4"/></svg>
-      Private: data stays on this device
-    </span>
+    <div class="flex flex-wrap items-center gap-2">
+      <span class="inline-flex items-center gap-1.5 rounded-full bg-emerald-50 px-3 py-1 text-xs font-medium text-emerald-700 ring-1 ring-emerald-200" title="Links are fetched directly, or through this site's own proxy if the server blocks that.">
+        <svg viewBox="0 0 24 24" class="h-3.5 w-3.5" fill="none" stroke="currentColor" stroke-width="2.5"><rect x="5" y="11" width="14" height="10" rx="2"/><path d="M8 11V7a4 4 0 0 1 8 0v4"/></svg>
+        Uploaded and pasted files stay on this device
+      </span>
+      <button id="helpBtn" class="rounded-md border border-slate-300 px-3 py-1.5 text-sm hover:bg-slate-50">How it works</button>
+      <button id="themeBtn" class="grid h-9 w-9 place-items-center rounded-md border border-slate-300 hover:bg-slate-50" title="Switch between light and dark" aria-label="Switch between light and dark">
+        <svg id="themeIcon" viewBox="0 0 24 24" class="h-4 w-4" fill="none" stroke="currentColor" stroke-width="2"></svg>
+      </button>
+    </div>
   </div>
 </header>
 
@@ -56,9 +105,13 @@
           <button class="tab-btn rounded-md px-3 py-1.5" data-tab="upload" aria-selected="false">Upload</button>
           <button class="tab-btn rounded-md px-3 py-1.5" data-tab="paste" aria-selected="false">Paste</button>
         </div>
-        <div class="flex gap-2 text-sm">
-          <button id="sampleBtn" class="rounded-md border border-slate-300 px-2.5 py-1.5 hover:bg-slate-50">Load sample</button>
-          <button id="brokenBtn" class="rounded-md border border-slate-300 px-2.5 py-1.5 hover:bg-slate-50" title="A sample containing deliberate mistakes">Broken sample</button>
+        <div class="menu relative text-sm">
+          <button class="menu-btn inline-flex items-center gap-1 rounded-md border border-slate-300 px-2.5 py-1.5 hover:bg-slate-50" aria-haspopup="true">Examples
+            <svg viewBox="0 0 24 24" class="h-3.5 w-3.5" fill="none" stroke="currentColor" stroke-width="2.5"><path d="m6 9 6 6 6-6"/></svg></button>
+          <div class="menu-list absolute right-0 z-20 mt-1 hidden w-64 rounded-lg border border-slate-200 bg-white p-1 shadow-lg">
+            <button id="sampleBtn" class="block w-full rounded-md px-3 py-2 text-left hover:bg-slate-100"><span class="font-medium">A valid calendar</span><span class="block text-xs text-slate-500">See what a passing result looks like</span></button>
+            <button id="brokenBtn" class="block w-full rounded-md px-3 py-2 text-left hover:bg-slate-100"><span class="font-medium">A calendar with mistakes</span><span class="block text-xs text-slate-500">See how errors and warnings are shown</span></button>
+          </div>
         </div>
       </div>
 
@@ -109,10 +162,36 @@
 
   <!-- RESULTS -->
   <section id="results" class="min-w-0">
-    <div id="emptyState" class="flex h-full min-h-[20rem] flex-col items-center justify-center gap-2 rounded-xl border border-dashed border-slate-300 bg-white p-8 text-center text-slate-500">
-      <svg viewBox="0 0 24 24" class="h-10 w-10 text-slate-300" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="3" y="5" width="18" height="16" rx="2"/><path d="M3 10h18M8 3v4M16 3v4"/></svg>
-      <p class="font-medium text-slate-600">No calendar validated yet</p>
-      <p class="text-sm">Paste iCalendar text, upload a file, fetch a URL, or load a sample.</p>
+    <div id="emptyState" class="rounded-xl border border-slate-200 bg-white p-5 shadow-sm sm:p-6">
+      <div id="helpContent" class="space-y-5 text-sm leading-6 text-slate-600">
+        <div>
+          <h2 class="text-base font-semibold text-slate-800">What this does</h2>
+          <p class="mt-1">Calendar apps share events as <strong>iCalendar</strong> data: an <span class="mono">.ics</span> file or a calendar link. If that data contains mistakes, apps like Google Calendar, Outlook or Apple Calendar may refuse it, skip events, or show the wrong times.</p>
+          <p class="mt-2">This tool reads a calendar, checks it against the official iCalendar rules (known as RFC 5545), and tells you in plain words what is wrong and on which line.</p>
+        </div>
+        <div>
+          <h2 class="text-base font-semibold text-slate-800">How to use it</h2>
+          <ol class="mt-1 list-decimal space-y-1 pl-5">
+            <li><strong>Give it a calendar.</strong> Paste a calendar link on the <em>URL</em> tab, drop an <span class="mono">.ics</span> file on the <em>Upload</em> tab, or paste the text on the <em>Paste</em> tab.</li>
+            <li><strong>Click Validate.</strong></li>
+            <li><strong>Read the result.</strong> A green card means the calendar is valid. A red card means there are errors to fix.</li>
+          </ol>
+          <p class="mt-2">Not sure what to expect? Open <em>Examples</em> and load one.</p>
+        </div>
+        <div>
+          <h2 class="text-base font-semibold text-slate-800">What the results show</h2>
+          <ul class="mt-1 list-disc space-y-1 pl-5">
+            <li><strong>Source:</strong> the calendar line by line. Lines with errors are red and lines with warnings are yellow.</li>
+            <li><strong>Issues:</strong> every problem found. <em>Errors</em> break the rules and should be fixed. <em>Warnings</em> are allowed but can cause trouble in some apps. <em>Notes</em> are for information.</li>
+            <li><strong>Inspector:</strong> what the calendar contains, with its events as a table or on a month calendar.</li>
+            <li><strong>Copy</strong> or <strong>Download</strong> the report to share it.</li>
+          </ul>
+        </div>
+        <div>
+          <h2 class="text-base font-semibold text-slate-800">Privacy</h2>
+          <p class="mt-1">Files you upload or paste are checked inside your browser and are never sent anywhere. A calendar link is fetched straight from its server. If that server blocks the request, the link is fetched through this site's own small proxy, which passes the file back and stores nothing.</p>
+        </div>
+      </div>
     </div>
 
     <div id="report" class="hidden space-y-4">
@@ -127,10 +206,22 @@
             <button class="tab-btn rounded-md px-3 py-1.5" data-tab="issues" aria-selected="false">Issues</button>
             <button class="tab-btn rounded-md px-3 py-1.5" data-tab="inspector" aria-selected="false">Inspector</button>
           </div>
-          <button id="copyBtn" class="inline-flex items-center gap-1.5 rounded-md border border-slate-300 px-3 py-1.5 text-sm hover:bg-slate-50">
-            <svg viewBox="0 0 24 24" class="h-4 w-4" fill="none" stroke="currentColor" stroke-width="2"><rect x="9" y="9" width="12" height="12" rx="2"/><path d="M5 15V5a2 2 0 0 1 2-2h10"/></svg>
-            <span>Copy report</span>
-          </button>
+          <div class="flex gap-2">
+            <button id="copyBtn" class="inline-flex items-center gap-1.5 rounded-md border border-slate-300 px-3 py-1.5 text-sm hover:bg-slate-50">
+              <svg viewBox="0 0 24 24" class="h-4 w-4" fill="none" stroke="currentColor" stroke-width="2"><rect x="9" y="9" width="12" height="12" rx="2"/><path d="M5 15V5a2 2 0 0 1 2-2h10"/></svg>
+              <span>Copy report</span>
+            </button>
+            <div class="menu relative text-sm">
+              <button class="menu-btn inline-flex items-center gap-1.5 rounded-md border border-slate-300 px-3 py-1.5 hover:bg-slate-50" aria-haspopup="true">
+                <svg viewBox="0 0 24 24" class="h-4 w-4" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 4v12m0 0-4-4m4 4 4-4"/><path d="M4 18v1a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-1"/></svg>
+                <span>Download</span>
+              </button>
+              <div class="menu-list absolute right-0 z-20 mt-1 hidden w-60 rounded-lg border border-slate-200 bg-white p-1 shadow-lg">
+                <button id="dlTxtBtn" class="block w-full rounded-md px-3 py-2 text-left hover:bg-slate-100"><span class="font-medium">Report (.txt)</span><span class="block text-xs text-slate-500">The full report as plain text</span></button>
+                <button id="dlCsvBtn" class="block w-full rounded-md px-3 py-2 text-left hover:bg-slate-100"><span class="font-medium">Issues (.csv)</span><span class="block text-xs text-slate-500">One row per issue, opens in Excel</span></button>
+              </div>
+            </div>
+          </div>
         </div>
 
         <div data-rpanel="issues" class="hidden space-y-3 p-3" id="issuesPanel"></div>
@@ -142,14 +233,23 @@
             <div id="countChips" class="flex flex-wrap gap-2"></div>
           </div>
           <div>
+            <div class="mb-3 flex flex-wrap items-center justify-between gap-2">
+              <h3 class="text-xs font-semibold uppercase tracking-wide text-slate-500">Events</h3>
+              <div class="inline-flex rounded-lg bg-slate-100 p-1 text-sm font-medium text-slate-600" id="viewTabs">
+                <button class="tab-btn rounded-md px-3 py-1" data-tab="table" aria-selected="true">Table</button>
+                <button class="tab-btn rounded-md px-3 py-1" data-tab="calendar" aria-selected="false">Calendar</button>
+              </div>
+            </div>
             <div class="mb-2 flex flex-wrap items-end gap-2">
               <input id="search" type="search" placeholder="Search summary, location, UID…"
                 class="min-w-0 flex-1 basis-48 rounded-lg border border-slate-300 px-3 py-1.5 text-sm focus:border-indigo-500 focus:outline-none focus:ring-2 focus:ring-indigo-200">
               <select id="typeFilter" class="rounded-lg border border-slate-300 px-2 py-1.5 text-sm"></select>
-              <label class="flex items-center gap-1 text-xs text-slate-500">From <input id="fromDate" type="date" class="rounded-lg border border-slate-300 px-2 py-1 text-sm text-slate-700"></label>
-              <label class="flex items-center gap-1 text-xs text-slate-500">To <input id="toDate" type="date" class="rounded-lg border border-slate-300 px-2 py-1 text-sm text-slate-700"></label>
+              <label class="table-only flex items-center gap-1 text-xs text-slate-500">From <input id="fromDate" type="date" class="rounded-lg border border-slate-300 px-2 py-1 text-sm text-slate-700"></label>
+              <label class="table-only flex items-center gap-1 text-xs text-slate-500">To <input id="toDate" type="date" class="rounded-lg border border-slate-300 px-2 py-1 text-sm text-slate-700"></label>
             </div>
             <p id="itemCount" class="mb-2 text-xs text-slate-500"></p>
+            <div data-vpanel="calendar" class="hidden" id="calendarView"></div>
+            <div data-vpanel="table">
             <div id="tableScrollTop" class="mb-1 overflow-x-auto overflow-y-hidden"><div class="h-px"></div></div>
             <div id="tableScroll" class="overflow-x-auto rounded-lg border border-slate-200">
               <table class="min-w-full text-left text-sm">
@@ -167,6 +267,7 @@
                 <tbody id="itemRows" class="divide-y divide-slate-100"></tbody>
               </table>
             </div>
+            </div>
           </div>
         </div>
 
@@ -177,6 +278,14 @@
     </div>
   </section>
 </main>
+
+<dialog id="helpDialog" class="w-[min(42rem,calc(100vw-2rem))] rounded-xl border border-slate-200 bg-white p-0 text-slate-800 shadow-xl">
+  <div class="flex items-center justify-between border-b border-slate-200 px-5 py-3">
+    <h2 class="text-base font-semibold">How it works</h2>
+    <button id="helpClose" class="rounded-md px-2 py-1 text-sm text-slate-600 hover:bg-slate-100">Close</button>
+  </div>
+  <div id="helpDialogBody" class="max-h-[75vh] overflow-y-auto p-5"></div>
+</dialog>
 
 <div id="toast" class="pointer-events-none fixed bottom-4 left-1/2 -translate-x-1/2 rounded-lg bg-slate-900 px-4 py-2 text-sm text-white opacity-0 transition"></div>
 
@@ -733,8 +842,75 @@ function buildInspector(result) {
       key: sd ? sd.key : null,
     };
   });
+  // Pair each VEVENT with its ical.js component so the calendar view can expand repeating events
+  let vevents = [];
+  try {
+    let jcal = ICAL.parse(result.lines.join('\r\n'));
+    if (typeof jcal[0] !== 'string') jcal = jcal[0];
+    vevents = new ICAL.Component(jcal).getAllSubcomponents('vevent');
+  } catch {}
+  const mine = items.filter(i => i.type === 'VEVENT');
+  if (vevents.length === mine.length) mine.forEach((it, i) => (it.ical = vevents[i]));
+
+  // Occurrences replaced by an override (RECURRENCE-ID), per UID, so they are not drawn twice
+  const overrides = new Map();
+  items.forEach(it => {
+    if (!it.recurrenceId) return;
+    if (!overrides.has(it.uid)) overrides.set(it.uid, new Set());
+    overrides.get(it.uid).add(it.recurrenceId.value.trim().replace(/Z$/, ''));
+  });
+
   items.sort((a, b) => (a.key === null) - (b.key === null) || (a.key || '').localeCompare(b.key || ''));
-  return { meta, items };
+  return { meta, items, overrides };
+}
+
+/* ---- Calendar view helpers (dates are handled as plain YYYYMMDD wall-clock days) ---- */
+const pad2 = n => String(n).padStart(2, '0');
+const dayKey = (y, m, d) => `${y}${pad2(m)}${pad2(d)}`;
+const keyToUTC = k => Date.UTC(+k.slice(0, 4), +k.slice(4, 6) - 1, +k.slice(6, 8));
+function addDays(key, n) {
+  const d = new Date(keyToUTC(key) + n * 86400000);
+  return dayKey(d.getUTCFullYear(), d.getUTCMonth() + 1, d.getUTCDate());
+}
+const todayKey = () => { const d = new Date(); return dayKey(d.getFullYear(), d.getMonth() + 1, d.getDate()); };
+
+/** How many days after its first day an item runs (0 for same-day). The end is exclusive. */
+function itemSpanDays(it) {
+  const s = it.start && parseDT(it.start.value.trim());
+  if (!s) return 0;
+  const ms = d => Date.UTC(d.y, d.mo - 1, d.d, d.h || 0, d.mi || 0, d.s || 0);
+  let end = null;
+  if (it.end) { const e = parseDT(it.end.value.trim()); if (e) end = ms(e); }
+  else if (it.duration) {
+    const m = /^\+?P(?:(\d+)W)?(?:(\d+)D)?(?:T(?:(\d+)H)?(?:(\d+)M)?(?:(\d+)S)?)?$/.exec(it.duration.value);
+    if (m) end = ms(s) + ((+m[1] || 0) * 604800 + (+m[2] || 0) * 86400 + (+m[3] || 0) * 3600 + (+m[4] || 0) * 60 + (+m[5] || 0)) * 1000;
+  }
+  if (end === null || end <= ms(s)) return 0;
+  return Math.min(60, Math.floor((end - 1 - Date.UTC(s.y, s.mo - 1, s.d)) / 86400000));
+}
+
+/** First days of an item's occurrences that touch [fromKey, toKey]; repeating events are expanded with ical.js. */
+function occurrenceDays(it, fromKey, toKey, span, overrides) {
+  const base = it.start || it.end;
+  const s = base && parseDT(base.value.trim());
+  if (!s) return [];
+  const timeOf = t => `${pad2(t.hour)}:${pad2(t.minute)}`;
+  const first = [{ day: dayKey(s.y, s.mo, s.d), time: s.kind === 'date-time' ? `${pad2(s.h)}:${pad2(s.mi)}` : '' }];
+  if (!it.rrule || !it.ical || !it.start) return first;
+  try {
+    const iter = new ICAL.Event(it.ical).iterator();
+    const skip = overrides.get(it.uid);
+    const out = [];
+    let t, n = 0;
+    while ((t = iter.next()) && n++ < 5000) {
+      const k = dayKey(t.year, t.month, t.day);
+      if (k > toKey) break;
+      if (addDays(k, span) < fromKey) continue;
+      if (skip && skip.has(t.toICALString().replace(/Z$/, ''))) continue;
+      out.push({ day: k, time: t.isDate ? '' : timeOf(t) });
+    }
+    return out;
+  } catch { return first; }
 }
 
 function fmtDT(p) {
@@ -772,7 +948,7 @@ function fmtRRule(r) {
 /* ------------------------------------------------------------------ *
  *  UI
  * ------------------------------------------------------------------ */
-const state = { result: null, inspector: null, sourceLabel: 'pasted text' };
+const state = { result: null, inspector: null, sourceLabel: 'pasted text', view: 'table', cal: null };
 
 function setupTabs(containerSel, panelAttr, onChange) {
   const btns = document.querySelectorAll(`${containerSel} .tab-btn`);
@@ -787,6 +963,7 @@ function setupTabs(containerSel, panelAttr, onChange) {
 let inputTab = 'url';
 const selectInputTab = setupTabs('#inputTabs', 'data-panel', name => (inputTab = name));
 const selectResultTab = setupTabs('#resultTabs', 'data-rpanel');
+setupTabs('#viewTabs', 'data-vpanel', name => { state.view = name; if (state.inspector) renderItems(); });
 
 function toast(msg) {
   const t = $('#toast');
@@ -801,6 +978,7 @@ function runValidation(opts = {}) {
   if (!text.trim()) { toast('Nothing to validate yet'); return; }
   state.result = validate(opts.raw ?? text, { checkLineEndings: !!opts.raw });
   state.inspector = buildInspector(state.result);
+  state.cal = null;
   render();
 }
 
@@ -898,8 +1076,10 @@ function renderItems() {
   const { items } = state.inspector;
   const q = $('#search').value.trim().toLowerCase();
   const type = $('#typeFilter').value;
-  const from = $('#fromDate').value.replace(/-/g, '');
-  const to = $('#toDate').value.replace(/-/g, '');
+  const calendar = state.view === 'calendar';
+  document.querySelectorAll('.table-only').forEach(el => el.classList.toggle('hidden', calendar));
+  const from = calendar ? '' : $('#fromDate').value.replace(/-/g, '');
+  const to = calendar ? '' : $('#toDate').value.replace(/-/g, '');
   const shown = items.filter(it => {
     if (type && it.type !== type) return false;
     if (q && ![it.summary, it.location, it.uid, it.status, it.rrule].some(s => s.toLowerCase().includes(q))) return false;
@@ -908,6 +1088,7 @@ function renderItems() {
     if (to && it.key.slice(0, 8) > to) return false;
     return true;
   });
+  if (calendar) { renderCalendar(shown); return; }
   requestAnimationFrame(syncTopScrollbar);
   $('#itemCount').textContent = `Showing ${shown.length} of ${items.length} item${items.length === 1 ? '' : 's'}, sorted by start date. Click a row for all properties.`;
 
@@ -946,6 +1127,97 @@ function renderItems() {
       </tr>
       <tr class="detail-row hidden bg-slate-50" data-for="${idx}"><td colspan="7" class="px-3 py-3">${detail}${alarms}</td></tr>`;
   }).join('');
+}
+
+function renderCalendar(shown) {
+  const today = todayKey();
+  if (!state.cal) {
+    // Open on the month of the next upcoming item, or the last one if everything is in the past
+    const keys = shown.map(i => i.key).filter(Boolean).map(k => k.slice(0, 8)).sort();
+    const pick = keys.find(k => k >= today) || keys[keys.length - 1] || today;
+    state.cal = { y: +pick.slice(0, 4), m: +pick.slice(4, 6), day: null };
+  }
+  const { y, m } = state.cal;
+  const firstKey = dayKey(y, m, 1);
+  const daysInMonth = new Date(Date.UTC(y, m, 0)).getUTCDate();
+  const offset = (new Date(keyToUTC(firstKey)).getUTCDay() + 6) % 7; // Monday first
+  const weeks = Math.ceil((offset + daysInMonth) / 7);
+  const gridStart = addDays(firstKey, -offset), gridEnd = addDays(gridStart, weeks * 7 - 1);
+
+  const byDay = {};
+  let inMonth = 0;
+  shown.forEach(it => {
+    const span = itemSpanDays(it);
+    occurrenceDays(it, gridStart, gridEnd, span, state.inspector.overrides).forEach(occ => {
+      if (occ.day.slice(0, 6) === firstKey.slice(0, 6)) inMonth++;
+      for (let d = 0; d <= span; d++) {
+        const k = addDays(occ.day, d);
+        if (k >= gridStart && k <= gridEnd) (byDay[k] ||= []).push({ it, time: d === 0 ? occ.time : '', cont: d > 0, span });
+      }
+    });
+  });
+  Object.values(byDay).forEach(list => list.sort((a, b) => a.time.localeCompare(b.time)));
+
+  const chipCls = it => it.status.toUpperCase() === 'CANCELLED' ? 'bg-red-50 text-red-700 line-through'
+    : it.status.toUpperCase() === 'TENTATIVE' ? 'bg-amber-50 text-amber-700'
+    : it.type !== 'VEVENT' ? 'bg-sky-50 text-sky-700' : 'bg-indigo-50 text-indigo-800';
+  const monthLabel = new Date(keyToUTC(firstKey)).toLocaleDateString('en-GB', { month: 'long', year: 'numeric', timeZone: 'UTC' });
+  $('#itemCount').textContent = `${inMonth} ${inMonth === 1 ? 'item starts' : 'items start'} in ${monthLabel}. Repeating events are shown on every date they fall on. Click a day to list its items.`;
+
+  let cells = '';
+  for (let i = 0; i < weeks * 7; i++) {
+    const k = addDays(gridStart, i);
+    const list = byDay[k] || [];
+    const outside = k.slice(0, 6) !== firstKey.slice(0, 6);
+    const chips = list.slice(0, 3).map(e => `<div class="truncate rounded px-1 text-[11px] leading-4 ${chipCls(e.it)}" title="${esc(e.it.summary)}">${e.time ? `<span class="opacity-70">${e.time}</span> ` : ''}${esc(e.it.summary) || '(no summary)'}</div>`).join('');
+    cells += `<button class="cal-day flex min-h-[3.25rem] flex-col gap-0.5 border-b border-r border-slate-200 p-1 text-left align-top hover:bg-slate-50 sm:min-h-[5.75rem] ${state.cal.day === k ? 'bg-indigo-50' : outside ? 'bg-slate-50' : ''}" data-day="${k}">
+      <span class="flex items-center justify-between text-xs ${outside ? 'text-slate-400' : 'text-slate-700'}">
+        <span class="${k === today ? 'grid h-5 w-5 place-items-center rounded-full bg-indigo-600 font-semibold text-white' : ''}">${+k.slice(6, 8)}</span>
+        ${list.length ? `<span class="rounded-full bg-indigo-600 px-1.5 text-[10px] font-semibold text-white sm:hidden">${list.length}</span>` : ''}
+      </span>
+      <span class="hidden min-w-0 flex-col gap-0.5 sm:flex">${chips}${list.length > 3 ? `<span class="px-1 text-[11px] text-slate-500">+${list.length - 3} more</span>` : ''}</span>
+    </button>`;
+  }
+
+  let detail = '<p class="mt-3 text-sm text-slate-500">Click a day to list its items.</p>';
+  if (state.cal.day) {
+    const list = byDay[state.cal.day] || [];
+    const label = new Date(keyToUTC(state.cal.day)).toLocaleDateString('en-GB', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric', timeZone: 'UTC' });
+    detail = `<div class="mt-3 rounded-lg border border-slate-200">
+      <div class="border-b border-slate-200 bg-slate-50 px-3 py-2 text-sm font-semibold text-slate-700">${label} <span class="font-normal text-slate-500">· ${list.length} item${list.length === 1 ? '' : 's'}</span></div>
+      ${list.length ? `<ul class="divide-y divide-slate-100">${list.map(e => `
+        <li class="flex flex-wrap items-baseline gap-x-3 gap-y-1 px-3 py-2 text-sm">
+          <span class="mono w-14 flex-none text-xs text-slate-500">${e.time || (e.cont ? 'cont.' : 'all day')}</span>
+          <span class="min-w-0 flex-1 basis-40">
+            <span class="font-medium text-slate-800 ${e.it.status.toUpperCase() === 'CANCELLED' ? 'line-through' : ''}">${esc(e.it.summary) || '<span class="italic text-slate-400">(no summary)</span>'}</span>
+            <span class="block text-xs text-slate-500">${[e.it.location, e.it.rrule ? fmtRRule(e.it.rrule) : '', e.span ? `runs ${e.span + 1} days` : '', e.it.status, e.it.type !== 'VEVENT' ? e.it.type : ''].filter(Boolean).map(esc).join(' · ')}</span>
+          </span>
+          <button class="goto mono flex-none rounded bg-slate-100 px-1.5 py-0.5 text-xs text-slate-600 hover:bg-slate-50" data-line="${e.it.comp.line}" title="Show in source">L${e.it.comp.line}</button>
+        </li>`).join('')}</ul>` : '<p class="px-3 py-3 text-sm text-slate-500">Nothing on this day.</p>'}
+    </div>`;
+  }
+
+  $('#calendarView').innerHTML = `
+    <div class="mb-2 flex items-center justify-between gap-2">
+      <div class="flex items-center gap-1">
+        <button id="calPrev" class="grid h-8 w-8 place-items-center rounded-md border border-slate-300 hover:bg-slate-50" aria-label="Previous month">‹</button>
+        <button id="calNext" class="grid h-8 w-8 place-items-center rounded-md border border-slate-300 hover:bg-slate-50" aria-label="Next month">›</button>
+        <span class="ml-2 text-sm font-semibold text-slate-800">${monthLabel}</span>
+      </div>
+      <button id="calToday" class="rounded-md border border-slate-300 px-2.5 py-1 text-sm hover:bg-slate-50">Today</button>
+    </div>
+    <div class="overflow-hidden rounded-lg border-l border-t border-slate-200">
+      <div class="grid grid-cols-7 bg-slate-50 text-center text-[11px] font-semibold uppercase tracking-wide text-slate-500">
+        ${['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'].map(d => `<div class="border-b border-r border-slate-200 py-1">${d}</div>`).join('')}
+      </div>
+      <div class="grid grid-cols-7">${cells}</div>
+    </div>${detail}`;
+}
+
+function shiftMonth(n) {
+  const d = new Date(Date.UTC(state.cal.y, state.cal.m - 1 + n, 1));
+  state.cal = { y: d.getUTCFullYear(), m: d.getUTCMonth() + 1, day: null };
+  renderItems();
 }
 
 /* Mirror the table's horizontal scrollbar above it, so wide tables can be scrolled from the top too. */
@@ -1045,9 +1317,56 @@ $('#copyBtn').addEventListener('click', async () => {
   }
 });
 
+function download(name, text, type) {
+  const a = Object.assign(document.createElement('a'), { href: URL.createObjectURL(new Blob([text], { type })), download: name });
+  document.body.append(a); a.click(); a.remove();
+  setTimeout(() => URL.revokeObjectURL(a.href), 1000);
+}
+const reportStamp = () => new Date().toISOString().slice(0, 10);
+$('#dlTxtBtn').addEventListener('click', () => state.result && download(`ical-report-${reportStamp()}.txt`, reportText() + '\n', 'text/plain;charset=utf-8'));
+$('#dlCsvBtn').addEventListener('click', () => {
+  if (!state.result) return;
+  const q = v => `"${String(v ?? '').replace(/"/g, '""')}"`;
+  const rows = [['Level', 'Line', 'Component', 'Message'], ...state.result.issues.map(i => [i.level, i.line ?? '', i.ctx, i.msg])];
+  download(`ical-issues-${reportStamp()}.csv`, '﻿' + rows.map(r => r.map(q).join(',')).join('\r\n') + '\r\n', 'text/csv;charset=utf-8');
+});
+
+// Help: the same text is shown in the empty results area and in a dialog
+$('#helpBtn').addEventListener('click', () => {
+  $('#helpDialogBody').innerHTML = $('#helpContent').outerHTML.replace('id="helpContent"', '');
+  $('#helpDialog').showModal();
+});
+$('#helpClose').addEventListener('click', () => $('#helpDialog').close());
+$('#helpDialog').addEventListener('click', e => { if (e.target === e.currentTarget) e.currentTarget.close(); });
+
+// Theme: follows the system setting until the button is used, then remembers the choice
+const SUN = '<circle cx="12" cy="12" r="4"/><path d="M12 2v2m0 16v2M4.9 4.9l1.4 1.4m11.4 11.4 1.4 1.4M2 12h2m16 0h2M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4"/>';
+const MOON = '<path d="M21 12.8A9 9 0 1 1 11.2 3a7 7 0 0 0 9.8 9.8z"/>';
+const paintThemeIcon = () => ($('#themeIcon').innerHTML = document.documentElement.classList.contains('dark') ? SUN : MOON);
+paintThemeIcon();
+$('#themeBtn').addEventListener('click', () => {
+  const dark = document.documentElement.classList.toggle('dark');
+  try { localStorage.setItem('theme', dark ? 'dark' : 'light'); } catch {}
+  paintThemeIcon();
+});
+matchMedia('(prefers-color-scheme: dark)').addEventListener('change', e => {
+  let saved = null;
+  try { saved = localStorage.getItem('theme'); } catch {}
+  if (!saved) { document.documentElement.classList.toggle('dark', e.matches); paintThemeIcon(); }
+});
+
 document.addEventListener('click', e => {
+  // Dropdown menus: open on their button, close on any other click
+  const menuBtn = e.target.closest('.menu-btn');
+  document.querySelectorAll('.menu-list').forEach(l => l.classList.toggle('hidden', !menuBtn || l.previousElementSibling !== menuBtn || !l.classList.contains('hidden')));
+
   const g = e.target.closest('.goto');
   if (g) { e.stopPropagation(); gotoLine(+g.dataset.line); return; }
+  if (e.target.closest('#calPrev')) return shiftMonth(-1);
+  if (e.target.closest('#calNext')) return shiftMonth(1);
+  if (e.target.closest('#calToday')) { const t = todayKey(); state.cal = { y: +t.slice(0, 4), m: +t.slice(4, 6), day: t }; return renderItems(); }
+  const day = e.target.closest('.cal-day');
+  if (day) { state.cal.day = day.dataset.day; return renderItems(); }
   const row = e.target.closest('.item-row');
   if (row) document.querySelector(`.detail-row[data-for="${row.dataset.idx}"]`)?.classList.toggle('hidden');
 });
