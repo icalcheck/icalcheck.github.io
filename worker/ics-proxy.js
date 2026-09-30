@@ -10,7 +10,7 @@
 
 // Sites allowed to use this proxy. Add your custom domain here if you get one.
 const ALLOWED_ORIGINS = [
-  'https://absolutetanka.github.io',
+  'https://icalcheck.github.io',
 ];
 
 // Optional: limit which calendar hosts may be fetched, e.g. ['pitchup.com'].
