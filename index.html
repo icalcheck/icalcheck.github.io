@@ -198,6 +198,7 @@
       <div id="statusCard"></div>
 
       <div class="grid grid-cols-2 gap-3 sm:grid-cols-4" id="statTiles"></div>
+      <div id="shareBox" class="share-box hidden"></div>
 
       <div class="rounded-xl border border-slate-200 bg-white shadow-sm">
         <div class="flex flex-wrap items-center justify-between gap-2 border-b border-slate-200 p-3">
@@ -207,6 +208,10 @@
             <button class="tab-btn rounded-md px-3 py-1.5" data-tab="inspector" aria-selected="false">Inspector</button>
           </div>
           <div class="flex gap-2">
+            <button id="shareBtn" class="inline-flex items-center gap-1.5 rounded-md border border-slate-300 px-3 py-1.5 text-sm hover:bg-slate-50">
+              <svg viewBox="0 0 24 24" class="h-4 w-4" fill="none" stroke="currentColor" stroke-width="2"><path d="M10 14a4 4 0 0 0 5.7 0l3-3a4 4 0 0 0-5.7-5.7l-1 1"/><path d="M14 10a4 4 0 0 0-5.7 0l-3 3a4 4 0 0 0 5.7 5.7l1-1"/></svg>
+              <span>Share link</span>
+            </button>
             <button id="copyBtn" class="inline-flex items-center gap-1.5 rounded-md border border-slate-300 px-3 py-1.5 text-sm hover:bg-slate-50">
               <svg viewBox="0 0 24 24" class="h-4 w-4" fill="none" stroke="currentColor" stroke-width="2"><rect x="9" y="9" width="12" height="12" rx="2"/><path d="M5 15V5a2 2 0 0 1 2-2h10"/></svg>
               <span>Copy report</span>
@@ -990,6 +995,7 @@ function render() {
   const pass = errors.length === 0;
   $('#emptyState').classList.add('hidden');
   $('#report').classList.remove('hidden');
+  $('#shareBox').classList.add('hidden');
 
   const compSummary = Object.entries(counts).filter(([n]) => n !== 'VCALENDAR').map(([n, c]) => `${c} ${n}`).join(', ') || 'no components';
   $('#statusCard').innerHTML = pass
@@ -1280,13 +1286,14 @@ const updateMeta = () => {
   const v = input.value;
   $('#inputMeta').textContent = `${v ? v.split(/\r\n|\r|\n/).length : 0} lines · ${new TextEncoder().encode(v).length.toLocaleString()} bytes`;
 };
-input.addEventListener('input', () => { updateMeta(); state.sourceLabel = 'pasted text'; });
+input.addEventListener('input', () => { updateMeta(); state.sourceLabel = 'pasted text'; state.srcUrl = null; });
 input.addEventListener('keydown', e => { if (e.key === 'Enter' && (e.ctrlKey || e.metaKey)) { e.preventDefault(); runValidation(); } });
 
-function loadText(text, label, raw) {
+function loadText(text, label, raw, srcUrl = null) {
   input.value = text.replace(/\r\n?/g, '\n');
   updateMeta();
   state.sourceLabel = label;
+  state.srcUrl = srcUrl; // a share link for a fetched calendar holds just its URL
   runValidation({ raw });
 }
 const loadSample = (text, label) => { selectInputTab('paste'); loadText(text, label); };
@@ -1424,7 +1431,7 @@ $('#urlForm').addEventListener('submit', async e => {
     }
     msg.className = 'text-sm text-emerald-700';
     msg.textContent = `Fetched ${new TextEncoder().encode(text).length.toLocaleString()} bytes${via}.`;
-    loadText(text, url, text);
+    loadText(text, url, text, url);
   } catch (err) {
     msg.className = 'text-sm text-red-600';
     msg.innerHTML = esc(err.message.startsWith('Direct') ? err.message : `Could not fetch the URL: ${err.message}`) +
@@ -1539,7 +1546,80 @@ END:VEVENT
 END:VCALENDAR
 `;
 
+/* ------------------------------------------------------------------ *
+ *  Share links. Everything goes in the part after "#", which browsers
+ *  never send to the server, so the calendar stays out of server logs.
+ * ------------------------------------------------------------------ */
+async function copyText(text, done) {
+  try { await navigator.clipboard.writeText(text); }
+  catch {
+    const ta = Object.assign(document.createElement('textarea'), { value: text });
+    document.body.append(ta); ta.select(); document.execCommand('copy'); ta.remove();
+  }
+  toast(done);
+}
+const toB64url = bytes => {
+  let s = '';
+  for (let i = 0; i < bytes.length; i += 0x8000) s += String.fromCharCode(...bytes.subarray(i, i + 0x8000));
+  return btoa(s).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
+};
+const fromB64url = s => Uint8Array.from(atob(s.replace(/-/g, '+').replace(/_/g, '/')), c => c.charCodeAt(0));
+async function packText(text) {
+  const stream = new Blob([text]).stream().pipeThrough(new CompressionStream('deflate-raw'));
+  return toB64url(new Uint8Array(await new Response(stream).arrayBuffer()));
+}
+async function unpackText(packed) {
+  const stream = new Blob([fromB64url(packed)]).stream().pipeThrough(new DecompressionStream('deflate-raw'));
+  return new Response(stream).text();
+}
+
+const MAX_LINK = 100000;
+function showShareBox(box, link) {
+  if (link.length > MAX_LINK) {
+    box.innerHTML = `<div class="rounded-lg border border-amber-200 bg-amber-50 px-3 py-2.5 text-sm text-amber-800">This calendar is too large to fit in a link. Send the .ics file instead.</div>`;
+    box.classList.remove('hidden');
+    return;
+  }
+  box.innerHTML = `<div class="rounded-lg border border-slate-200 bg-white p-3 text-sm shadow-sm">
+    <div class="flex gap-2">
+      <input readonly value="${esc(link)}" class="mono min-w-0 flex-1 rounded-md border border-slate-300 bg-slate-50 px-2 py-1.5 text-xs" onclick="this.select()">
+      <button class="share-copy rounded-md bg-indigo-600 px-3 py-1.5 text-sm font-medium text-white hover:bg-indigo-500">Copy</button>
+    </div>
+    <p class="mt-2 text-xs text-slate-500">Opening this link runs the same check again. <span class="text-amber-700">Anyone you send it to can see everything in that calendar.</span>${link.length > 8000 ? ' It is long, so some email apps may cut it off.' : ''}</p>
+  </div>`;
+  box.classList.remove('hidden');
+  copyText(link, 'Share link copied');
+}
+document.addEventListener('click', e => {
+  const b = e.target.closest('.share-copy');
+  if (b) copyText(b.closest('.share-box').querySelector('input').value, 'Share link copied');
+});
+
+$('#shareBtn').addEventListener('click', async () => {
+  if (!state.result) return;
+  const base = location.origin + location.pathname;
+  const link = state.srcUrl ? `${base}#url=${encodeURIComponent(state.srcUrl)}` : `${base}#ics=${await packText(input.value)}`;
+  showShareBox($('#shareBox'), link);
+});
+
+/** Opens whatever a share link carries. ?url= also works, like icalendar.org's validator. */
+async function openFromLink() {
+  const hash = new URLSearchParams(location.hash.slice(1));
+  const url = hash.get('url') || new URLSearchParams(location.search).get('url');
+  try {
+    if (url) {
+      selectInputTab('url');
+      $('#urlInput').value = url;
+      $('#urlForm').requestSubmit();
+    } else if (hash.get('ics')) {
+      selectInputTab('paste');
+      loadText(await unpackText(hash.get('ics')), 'the shared calendar');
+    }
+  } catch { toast('This share link could not be opened. It may have been cut short.'); }
+}
+
 updateMeta();
+openFromLink();
 </script>
 </body>
 </html>
